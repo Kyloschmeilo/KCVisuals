@@ -1,7 +1,7 @@
 {
   "categories": [
     {
-      "id": "swords", "group": "Weapons", "displayName": "Swords",
+      "id": "swords", "group": "Waffen", "displayName": "Schwerter",
       "previewPath": "textures/item/diamond_sword.png",
       "paths": [
         "textures/item/wooden_sword*", "textures/item/stone_sword*", "textures/item/iron_sword*", "textures/item/golden_sword*",
@@ -13,7 +13,7 @@
       ]
     },
     {
-      "id": "axes", "group": "Weapons", "displayName": "Axes",
+      "id": "axes", "group": "Waffen", "displayName": "Äxte",
       "previewPath": "textures/item/netherite_axe.png",
       "paths": [
         "textures/item/wooden_axe*", "textures/item/stone_axe*", "textures/item/iron_axe*", "textures/item/golden_axe*",
@@ -25,12 +25,12 @@
       ]
     },
     {
-      "id": "mace", "group": "Weapons", "displayName": "Mace",
+      "id": "mace", "group": "Waffen", "displayName": "Streitkolben",
       "previewPath": "textures/item/mace.png",
       "paths": ["textures/item/mace*", "models/item/mace*", "items/mace*", "textures/item/heavy_core*", "models/item/heavy_core*", "items/heavy_core*"]
     },
     {
-      "id": "bow", "group": "Weapons", "displayName": "Bow",
+      "id": "bow", "group": "Waffen", "displayName": "Bogen",
       "previewPath": "textures/item/bow.png",
       "paths": [
         "textures/item/bow.png*", "textures/item/bow_pulling_*", "textures/item/bow_standby*",
@@ -39,17 +39,17 @@
       ]
     },
     {
-      "id": "crossbow", "group": "Weapons", "displayName": "Crossbow",
+      "id": "crossbow", "group": "Waffen", "displayName": "Armbrust",
       "previewPath": "textures/item/crossbow_standby.png",
       "paths": ["textures/item/crossbow*", "models/item/crossbow*", "items/crossbow*"]
     },
     {
-      "id": "trident", "group": "Weapons", "displayName": "Trident",
+      "id": "trident", "group": "Waffen", "displayName": "Dreizack",
       "previewPath": "textures/item/trident.png",
       "paths": ["textures/item/trident*", "models/item/trident*", "items/trident*", "textures/entity/trident*", "textures/entity/trident/*"]
     },
     {
-      "id": "arrows", "group": "Weapons", "displayName": "Arrows",
+      "id": "arrows", "group": "Waffen", "displayName": "Pfeile",
       "previewPath": "textures/item/arrow.png",
       "paths": [
         "textures/item/arrow*", "textures/item/tipped_arrow*", "textures/item/spectral_arrow*",
@@ -59,7 +59,7 @@
       ]
     },
     {
-      "id": "armor_netherite", "group": "Armor", "displayName": "Netherite armor",
+      "id": "armor_netherite", "group": "Rüstung", "displayName": "Netherit-Rüstung",
       "previewPath": "textures/item/netherite_chestplate.png",
       "paths": [
         "textures/item/netherite_helmet*", "textures/item/netherite_chestplate*", "textures/item/netherite_leggings*", "textures/item/netherite_boots*",
@@ -70,7 +70,7 @@
       ]
     },
     {
-      "id": "armor_diamond", "group": "Armor", "displayName": "Diamond armor",
+      "id": "armor_diamond", "group": "Rüstung", "displayName": "Diamant-Rüstung",
       "previewPath": "textures/item/diamond_chestplate.png",
       "paths": [
         "textures/item/diamond_helmet*", "textures/item/diamond_chestplate*", "textures/item/diamond_leggings*", "textures/item/diamond_boots*",
@@ -81,7 +81,7 @@
       ]
     },
     {
-      "id": "armor_layers", "group": "Armor", "displayName": "Other armor and glint",
+      "id": "armor_layers", "group": "Rüstung", "displayName": "Andere Rüstung & Glanz",
       "previewPath": "textures/item/iron_chestplate.png",
       "paths": [
         "textures/item/iron_helmet*", "textures/item/iron_chestplate*", "textures/item/iron_leggings*", "textures/item/iron_boots*",
@@ -110,7 +110,7 @@
       ]
     },
     {
-      "id": "elytra", "group": "Armor", "displayName": "Elytra",
+      "id": "elytra", "group": "Rüstung", "displayName": "Elytren",
       "previewPath": "textures/item/elytra.png",
       "paths": [
         "textures/item/elytra*", "models/item/elytra*", "items/elytra*",
@@ -118,7 +118,7 @@
       ]
     },
     {
-      "id": "shield", "group": "Armor", "displayName": "Shield",
+      "id": "shield", "group": "Rüstung", "displayName": "Schild",
       "previewPath": "textures/item/shield.png",
       "paths": [
         "textures/item/shield*", "models/item/shield*", "items/shield*",
@@ -126,7 +126,7 @@
       ]
     },
     {
-      "id": "end_crystal", "group": "Crystal PvP", "displayName": "End crystal",
+      "id": "end_crystal", "group": "Crystal PvP", "displayName": "Endkristall",
       "previewPath": "textures/item/end_crystal.png",
       "paths": [
         "textures/entity/end_crystal/*", "textures/entity/endercrystal/*",
@@ -143,14 +143,14 @@
       ]
     },
     {
-      "id": "respawn_anchor", "group": "Crystal PvP", "displayName": "Respawn anchor",
+      "id": "respawn_anchor", "group": "Crystal PvP", "displayName": "Seelenanker",
       "previewPath": "textures/block/respawn_anchor_top.png",
       "paths": [
         "textures/block/respawn_anchor_*", "models/block/respawn_anchor*", "models/item/respawn_anchor*", "items/respawn_anchor*"
       ]
     },
     {
-      "id": "glowstone", "group": "Crystal PvP", "displayName": "Glowstone",
+      "id": "glowstone", "group": "Crystal PvP", "displayName": "Leuchtstein",
       "previewPath": "textures/block/glowstone.png",
       "paths": [
         "textures/block/glowstone.png*", "textures/item/glowstone_dust*",
@@ -158,7 +158,7 @@
       ]
     },
     {
-      "id": "totem", "group": "Consumables", "displayName": "Totem of Undying",
+      "id": "totem", "group": "Items", "displayName": "Totem",
       "previewPath": "textures/item/totem_of_undying.png",
       "paths": [
         "textures/item/totem_of_undying*", "models/item/totem_of_undying*", "items/totem_of_undying*",
@@ -166,12 +166,12 @@
       ]
     },
     {
-      "id": "ender_pearl", "group": "Consumables", "displayName": "Ender pearl",
+      "id": "ender_pearl", "group": "Items", "displayName": "Enderperle",
       "previewPath": "textures/item/ender_pearl.png",
       "paths": ["textures/item/ender_pearl*", "models/item/ender_pearl*", "items/ender_pearl*"]
     },
     {
-      "id": "golden_apple", "group": "Consumables", "displayName": "Golden apple",
+      "id": "golden_apple", "group": "Items", "displayName": "Goldener Apfel",
       "previewPath": "textures/item/golden_apple.png",
       "paths": [
         "textures/item/golden_apple*", "models/item/golden_apple*", "items/golden_apple*",
@@ -179,7 +179,7 @@
       ]
     },
     {
-      "id": "wind_charge", "group": "Consumables", "displayName": "Wind charge",
+      "id": "wind_charge", "group": "Items", "displayName": "Windkugel",
       "previewPath": "textures/item/wind_charge.png",
       "paths": [
         "textures/item/wind_charge*", "models/item/wind_charge*", "items/wind_charge*",
@@ -188,7 +188,7 @@
       ]
     },
     {
-      "id": "potions", "group": "Consumables", "displayName": "Potions",
+      "id": "potions", "group": "Items", "displayName": "Tränke",
       "previewPath": "textures/item/splash_potion.png",
       "paths": [
         "textures/item/potion*", "textures/item/splash_potion*", "textures/item/lingering_potion*", "textures/item/glass_bottle*",
@@ -197,7 +197,7 @@
       ]
     },
     {
-      "id": "splash_particles", "group": "Particles", "displayName": "Splash and potion particles",
+      "id": "splash_particles", "group": "Partikel", "displayName": "Trank-Partikel",
       "previewPath": "textures/particle/splash_0.png",
       "paths": [
         "textures/particle/splash_*", "textures/particle/effect_*", "textures/particle/spell_*", "textures/particle/bubble*",
@@ -206,14 +206,14 @@
       ]
     },
     {
-      "id": "cobweb", "group": "World", "displayName": "Cobweb",
+      "id": "cobweb", "group": "Welt", "displayName": "Spinnennetz",
       "previewPath": "textures/block/cobweb.png",
       "paths": [
         "textures/block/cobweb.png*", "textures/item/cobweb*", "models/item/cobweb*", "items/cobweb*", "models/block/cobweb*"
       ]
     },
     {
-      "id": "water_lava", "group": "World", "displayName": "Water and lava",
+      "id": "water_lava", "group": "Welt", "displayName": "Wasser & Lava",
       "previewPath": "textures/block/water_still.png",
       "paths": [
         "textures/block/water_*", "textures/block/lava_*",
@@ -223,7 +223,7 @@
       ]
     },
     {
-      "id": "fire", "group": "World", "displayName": "Fire",
+      "id": "fire", "group": "Welt", "displayName": "Feuer",
       "previewPath": "textures/block/fire_0.png",
       "paths": [
         "textures/block/fire_0.png*", "textures/block/fire_1.png*", "textures/block/fire_2.png*",
@@ -234,7 +234,7 @@
       ]
     },
     {
-      "id": "explosion_particles", "group": "Particles", "displayName": "Explosion particles",
+      "id": "explosion_particles", "group": "Partikel", "displayName": "Explosionen",
       "previewPath": "textures/particle/explosion_0.png",
       "paths": [
         "textures/particle/explosion*", "textures/particle/big_smoke_*", "textures/particle/generic_*",
@@ -242,7 +242,7 @@
       ]
     },
     {
-      "id": "crit_particles", "group": "Particles", "displayName": "Crit and hit particles",
+      "id": "crit_particles", "group": "Partikel", "displayName": "Krit- & Trefferpartikel",
       "previewPath": "textures/particle/critical_hit.png",
       "paths": [
         "textures/particle/critical_hit*", "textures/particle/damage*", "textures/particle/sweep_*",
@@ -250,14 +250,14 @@
       ]
     },
     {
-      "id": "hotbar", "group": "Interface", "displayName": "Hotbar",
+      "id": "hotbar", "group": "Oberfläche", "displayName": "Hotbar",
       "previewPath": "textures/gui/sprites/hud/hotbar.png",
       "paths": [
         "textures/gui/sprites/hud/hotbar*"
       ]
     },
     {
-      "id": "hud_icons", "group": "Interface", "displayName": "HUD icons",
+      "id": "hud_icons", "group": "Oberfläche", "displayName": "HUD-Symbole",
       "previewPath": "textures/gui/sprites/hud/heart/full.png",
       "paths": [
         "textures/gui/sprites/hud/heart/*", "textures/gui/sprites/hud/food_*", "textures/gui/sprites/hud/armor_*",
@@ -267,19 +267,19 @@
       ]
     },
     {
-      "id": "crosshair", "group": "Interface", "displayName": "Crosshair",
+      "id": "crosshair", "group": "Oberfläche", "displayName": "Fadenkreuz",
       "previewPath": "textures/gui/sprites/hud/crosshair.png",
       "paths": ["textures/gui/sprites/hud/crosshair*"]
     },
     {
-      "id": "inventory_gui", "group": "Interface", "displayName": "Inventory and containers",
+      "id": "inventory_gui", "group": "Oberfläche", "displayName": "Inventar & Kisten",
       "previewPath": "textures/gui/container/inventory.png",
       "paths": [
         "textures/gui/container/*", "textures/gui/sprites/container/*", "textures/gui/sprites/recipe_book/*"
       ]
     },
     {
-      "id": "sky", "group": "World", "displayName": "Sky, sun and clouds",
+      "id": "sky", "group": "Welt", "displayName": "Himmel & Wolken",
       "previewPath": "textures/environment/celestial/sun.png",
       "paths": [
         "textures/environment/*", "optifine/sky/*", "mcpatcher/sky/*"
