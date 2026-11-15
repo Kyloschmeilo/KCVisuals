@@ -83,6 +83,11 @@ public final class PackSession {
         return loadError;
     }
 
+    /** The first scan failed, so profiles cannot be loaded, applied or activated until a rescan succeeds. */
+    public boolean isSelectionUnknown() {
+        return selectionUnknown;
+    }
+
     public boolean isApplying() {
         return applying;
     }
@@ -132,11 +137,16 @@ public final class PackSession {
         boolean first = !loadedOnce || selectionUnknown;
         MinecraftClient mc = MinecraftClient.getInstance();
         CompletableFuture.supplyAsync(() -> {
-            PackIndex idx = PackScanner.scan(paths.packs(), registry, paths.index());
-            String active = store.active();
-            ProfileStore.LoadResult r = first ? store.load(active, idx) : null;
-            return new Object[] {idx, active, r};
-        }, IO).whenCompleteAsync((res, err) -> {
+            String active = store.active(); // read here so the error path never touches the disk on the render thread
+            try {
+                PackIndex idx = PackScanner.scan(paths.packs(), registry, paths.index());
+                ProfileStore.LoadResult r = first ? store.load(active, idx) : null;
+                return new Object[] {idx, active, r, null};
+            } catch (RuntimeException e) {
+                return new Object[] {null, active, null, e};
+            }
+        }, IO).whenCompleteAsync((res, thrown) -> {
+            Throwable err = thrown != null ? thrown : (Throwable) res[3];
             loading = false;
             loadedOnce = true;
             if (closed) {
@@ -146,7 +156,7 @@ public final class PackSession {
                 KCVisuals.LOGGER.error("Scanning packs failed", err);
                 loadError = "Packs konnten nicht eingelesen werden";
                 if (activeProfile == null) {
-                    activeProfile = store.active();
+                    activeProfile = res != null ? (String) res[1] : ProfileStore.DEFAULT;
                 }
                 selectionUnknown = selectionUnknown || first;
                 Toasts.show(Toasts.APPLY, "Packs konnten nicht eingelesen werden", "Details im Log");
@@ -211,6 +221,10 @@ public final class PackSession {
      */
     public void activate(String name) {
         if (index == null) {
+            return;
+        }
+        if (selectionUnknown) {
+            Toasts.show(Toasts.APPLY, "Aktivieren nicht möglich", "Packs zuerst neu einlesen");
             return;
         }
         PackIndex idx = index;

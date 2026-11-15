@@ -298,7 +298,7 @@ public class ProfilesTab implements TabPanel {
         delete.style = confirming ? Button.Style.DANGER : Button.Style.SECONDARY;
         boolean isActive = sel != null && sel.name().equals(activeName());
         delete.enabled = sel != null && !isActive;
-        activate.enabled = sel != null && session.index() != null && !session.isApplying();
+        activate.enabled = sel != null && session.index() != null && !session.isApplying() && !session.isSelectionUnknown();
         boolean confirmActivate = Util.getMeasuringTimeMs() < confirmActivateUntil;
         activate.label(session.isApplying() ? "Wird angewendet…"
                 : confirmActivate ? "Änderungen verwerfen?" : (isActive ? "Neu anwenden" : "Aktivieren"));
@@ -338,6 +338,9 @@ public class ProfilesTab implements TabPanel {
         if (message != null && Util.getMeasuringTimeMs() < messageUntil) {
             Draw.text(ctx, Draw.ellipsize(message, detW - 16 - activate.w - delete.w),
                     detX + 10, activate.y + 6, messageColor);
+        } else if (session.isSelectionUnknown()) {
+            Draw.text(ctx, Draw.ellipsize("Packs nicht eingelesen – im Packs-Tab neu einlesen", detW - 24 - activate.w - delete.w),
+                    detX + 10, activate.y + 6, Theme.DANGER);
         } else if (session.isDirty()) {
             Draw.text(ctx, Draw.ellipsize("Ungespeicherte Änderungen im Packs-Tab", detW - 24 - activate.w - delete.w),
                     detX + 10, activate.y + 6, Theme.TEXT_FAINT);

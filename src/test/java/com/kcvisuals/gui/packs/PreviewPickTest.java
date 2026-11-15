@@ -3,9 +3,12 @@ package com.kcvisuals.gui.packs;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.kcvisuals.pack.Category;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 
 class PreviewPickTest {
@@ -46,32 +49,93 @@ class PreviewPickTest {
         assertNull(PreviewPick.find(Set.of("assets/minecraft/models/item/diamond_sword.json", "pack.png"), SWORDS));
     }
 
+    static final String CUSTOM_MODEL = "{\"parent\":\"item/smaller_util\",\"textures\":{\"0\":\"item/end_crystal\"},"
+            + "\"elements\":[{\"from\":[0,0,0],\"to\":[16,16,16]}]}";
+    static final String GENERATED = "{\"parent\":\"minecraft:item/generated\",\"textures\":{\"layer0\":\"item/end_crystal\"}}";
+    static final String HANDHELD = "{\"parent\":\"item/handheld\",\"textures\":{\"layer0\":\"minecraft:item/diamond_sword\"}}";
+
+    /** Reader over a fixed map of entry name to JSON text. */
+    static Function<String, String> reader(Map<String, String> files) {
+        return files::get;
+    }
+
     @Test
-    void largeItemTextureWithCustomModelIsAnAtlas() {
+    void customParentLargeTextureIsAtlas() {
         String tex = "assets/minecraft/textures/item/end_crystal.png";
-        Set<String> withModel = Set.of(tex, "assets/minecraft/models/item/end_crystal.json");
-        Set<String> withItemDef = Set.of(tex, "assets/minecraft/items/End_Crystal.json");
-        Set<String> textureOnly = Set.of(tex);
-        assertTrue(PreviewPick.isModelAtlas(withModel, tex, 128, 128));
-        assertTrue(PreviewPick.isModelAtlas(withItemDef, tex, 64, 32));
+        String model = "assets/minecraft/models/item/end_crystal.json";
+        Function<String, String> r = reader(Map.of(model, CUSTOM_MODEL));
+        assertTrue(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 128, 128, r));
         // icon-sized texture: shown as-is even with a custom model
-        assertFalse(PreviewPick.isModelAtlas(withModel, tex, 32, 32));
-        assertFalse(PreviewPick.isModelAtlas(withModel, tex, 16, 16));
-        // HD texture without a custom model: a real (large) icon, shown as-is
-        assertFalse(PreviewPick.isModelAtlas(textureOnly, tex, 128, 128));
+        assertFalse(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 32, 32, r));
+        // unreadable model counts as custom
+        assertTrue(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 128, 128, reader(Map.of())));
+        // HD texture without any model of its own: a real (large) icon
+        assertFalse(PreviewPick.isModelAtlas(Set.of(tex), tex, 128, 128, r));
         // a model for a different item does not count
-        assertFalse(PreviewPick.isModelAtlas(Set.of(tex, "assets/minecraft/models/item/end_crystal_2.json"), tex, 128, 128));
+        String other = "assets/minecraft/models/item/end_crystal_2.json";
+        assertFalse(PreviewPick.isModelAtlas(Set.of(tex, other), tex, 128, 128, reader(Map.of(other, CUSTOM_MODEL))));
+    }
+
+    @Test
+    void hdIconWithGeneratedParentIsNotAtlas() {
+        String tex = "assets/minecraft/textures/item/end_crystal.png";
+        String model = "assets/minecraft/models/item/end_crystal.json";
+        assertFalse(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 512, 512, reader(Map.of(model, GENERATED))));
+        String sword = "assets/minecraft/textures/item/diamond_sword.png";
+        String swordModel = "assets/minecraft/models/item/diamond_sword.json";
+        assertFalse(PreviewPick.isModelAtlas(Set.of(sword, swordModel), sword, 64, 64, reader(Map.of(swordModel, HANDHELD))));
+        // generated parent but no layer0: not a flat icon
+        String noLayer = "{\"parent\":\"item/generated\",\"textures\":{\"particle\":\"item/x\"}}";
+        assertTrue(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 128, 128, reader(Map.of(model, noLayer))));
+    }
+
+    @Test
+    void itemDefinitionResolvesToModelInPack() {
+        String tex = "assets/minecraft/textures/item/end_crystal.png";
+        String def = "assets/minecraft/items/End_Crystal.json";
+        String flat = "assets/minecraft/models/item/crystal_flat.json";
+        String fancy = "assets/minecraft/models/item/crystal_3d.json";
+        String toFlat = "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/crystal_flat\"}}";
+        String toFancy = "{\"model\":{\"type\":\"minecraft:select\",\"cases\":[{\"model\":{\"type\":\"model\","
+                + "\"model\":\"item/crystal_flat\"}}],\"fallback\":{\"type\":\"minecraft:model\",\"model\":\"item/crystal_3d\"}}}";
+        String toVanilla = "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/end_crystal\"}}";
+        Map<String, String> files = Map.of(flat, GENERATED, fancy, CUSTOM_MODEL);
+        Set<String> e = Set.of(tex, def, flat, fancy);
+        assertFalse(PreviewPick.isModelAtlas(e, tex, 128, 128, reader(with(files, def, toFlat))));
+        assertTrue(PreviewPick.isModelAtlas(e, tex, 128, 128, reader(with(files, def, toFancy))));
+        // model not shipped by the pack: cannot be shown to be flat, keep the 3D badge
+        assertTrue(PreviewPick.isModelAtlas(e, tex, 128, 128, reader(with(files, def, toVanilla))));
     }
 
     @Test
     void atlasRuleOnlyAppliesToItemTextures() {
         String entity = "assets/minecraft/textures/entity/end_crystal/end_crystal.png";
-        Set<String> e = Set.of(entity, "assets/minecraft/models/item/end_crystal.json");
-        assertFalse(PreviewPick.isModelAtlas(e, entity, 64, 32));
-        assertFalse(PreviewPick.isModelAtlas(e, null, 64, 64));
+        String model = "assets/minecraft/models/item/end_crystal.json";
+        Function<String, String> r = reader(Map.of(model, CUSTOM_MODEL));
+        Set<String> e = Set.of(entity, model);
+        assertFalse(PreviewPick.isModelAtlas(e, entity, 64, 32, r));
+        assertFalse(PreviewPick.isModelAtlas(e, null, 64, 64, r));
         // legacy textures/items/ path maps to the modern item name
         String legacy = "assets/minecraft/textures/items/diamond_sword.png";
-        assertTrue(PreviewPick.isModelAtlas(Set.of(legacy, "assets/minecraft/models/item/diamond_sword.json"), legacy, 64, 64));
+        String swordModel = "assets/minecraft/models/item/diamond_sword.json";
+        assertTrue(PreviewPick.isModelAtlas(Set.of(legacy, swordModel), legacy, 64, 64,
+                reader(Map.of(swordModel, CUSTOM_MODEL))));
+    }
+
+    @Test
+    void flatIconModelDetection() {
+        assertTrue(PreviewPick.isFlatIconModel(GENERATED));
+        assertTrue(PreviewPick.isFlatIconModel(HANDHELD));
+        assertTrue(PreviewPick.isFlatIconModel("{\"parent\":\"builtin/generated\",\"textures\":{\"layer0\":\"x\"}}"));
+        assertFalse(PreviewPick.isFlatIconModel(CUSTOM_MODEL));
+        assertFalse(PreviewPick.isFlatIconModel("not json"));
+        assertFalse(PreviewPick.isFlatIconModel(null));
+    }
+
+    private static Map<String, String> with(Map<String, String> base, String k, String v) {
+        Map<String, String> m = new HashMap<>(base);
+        m.put(k, v);
+        return m;
     }
 
     @Test

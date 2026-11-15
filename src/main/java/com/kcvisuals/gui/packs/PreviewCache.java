@@ -45,8 +45,8 @@ public final class PreviewCache {
 
     private enum State { LOADING, READY, NONE, MODEL_3D }
 
-    /** Raw preview bytes plus what is needed to judge them. {@code entries} is null for Vanilla. */
-    private record Raw(byte[] bytes, java.util.Set<String> entries, String entry) {}
+    /** Raw preview bytes plus what is needed to judge them. {@code source} is null for Vanilla. */
+    private record Raw(byte[] bytes, PackSource source, String entry) {}
 
     private static final class Entry {
         volatile State state = State.LOADING;
@@ -115,7 +115,8 @@ public final class PreviewCache {
                 boolean atlas;
                 try {
                     int[] f = PreviewPick.firstFrame(decoded.getWidth(), decoded.getHeight());
-                    atlas = raw.entries() != null && PreviewPick.isModelAtlas(raw.entries(), raw.entry(), f[2], f[3]);
+                    atlas = raw.source() != null && PreviewPick.isModelAtlas(raw.source().entries(), raw.entry(), f[2], f[3],
+                            name -> readText(raw.source(), name));
                 } catch (RuntimeException e) {
                     decoded.close();
                     throw e;
@@ -152,6 +153,15 @@ public final class PreviewCache {
         entry.state = State.READY;
     }
 
+    /** Small text entry (item model JSON) of a pack, or null if unreadable. Worker thread. */
+    private static String readText(PackSource src, String entry) {
+        try (InputStream s = src.open(entry)) {
+            return new String(s.readNBytes(256 * 1024), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
     private Raw readRaw(String packId, Category c) throws IOException {
         if (VANILLA.equals(packId)) {
             InputSupplier<InputStream> in = MinecraftClient.getInstance().getDefaultResourcePack()
@@ -172,7 +182,7 @@ public final class PreviewCache {
             return null;
         }
         try (InputStream s = src.open(entry)) {
-            return new Raw(s.readAllBytes(), src.entries(), entry);
+            return new Raw(s.readAllBytes(), src, entry);
         }
     }
 
