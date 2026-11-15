@@ -53,9 +53,19 @@ public record PackPath(String relative, String modern) {
     /**
      * True if {@code out} is a safe path inside a pack: {@code assets/<namespace>/<path>} with only lowercase
      * identifier characters, no empty segments, no segment made only of dots ({@code .}, {@code ..}, {@code ...}: the
-     * last is collapsed by Windows), no backslash, colon or drive prefix. Pack contents are untrusted, so every output
+     * last is collapsed by Windows), no backslash, colon or drive prefix, and no Windows device name ({@code con}, {@code nul},
+     * {@code com1}... before the first dot). Pack contents are untrusted, so every output
      * path and every resource reference is checked with this before it can become a file path.
      */
+    private static final java.util.regex.Pattern WINDOWS_DEVICE =
+            java.util.regex.Pattern.compile("(con|prn|aux|nul|com[1-9]|lpt[1-9])", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** {@code con}, {@code nul.png}, {@code COM1.png.mcmeta}...: Windows maps these to devices whatever the extension. */
+    static boolean isWindowsDeviceName(String segment) {
+        int dot = segment.indexOf('.');
+        return WINDOWS_DEVICE.matcher(dot < 0 ? segment : segment.substring(0, dot)).matches();
+    }
+
     public static boolean isSafeOutput(String out) {
         if (out == null || !out.startsWith("assets/")) {
             return false;
@@ -65,7 +75,7 @@ public record PackPath(String relative, String modern) {
             return false;
         }
         for (String s : segments) {
-            if (!SEGMENT.matcher(s).matches() || s.chars().allMatch(ch -> ch == '.')) {
+            if (!SEGMENT.matcher(s).matches() || s.chars().allMatch(ch -> ch == '.') || isWindowsDeviceName(s)) {
                 return false;
             }
         }

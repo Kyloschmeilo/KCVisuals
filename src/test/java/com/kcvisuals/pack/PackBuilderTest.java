@@ -182,6 +182,34 @@ class PackBuilderTest {
     }
 
     @Test
+    void unparseableModelRecordedAsSkipped(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "bad.zip", Map.of(MC + "models/item/diamond_sword.json", "{not json"),
+                MC + SWORD);
+        PackBuilder.BuildReport report = build(dir, Selection.of(Map.of("swords", "bad.zip")));
+        assertEquals(List.of("bad.zip:" + MC + "models/item/diamond_sword.json"), report.skippedEntries());
+    }
+
+    @Test
+    void reservedWindowsNameSkipped(@TempDir Path dir) throws IOException {
+        String con = MC + "textures/item/totem_of_undying/con.png";
+        String nul = MC + "textures/item/totem_of_undying/NUL.png.mcmeta";
+        String com1 = MC + "textures/item/totem_of_undying/Com1.png";
+        zip(dir.resolve("packs"), "dev.zip", MC + TOTEM, con, nul, com1, MC + "textures/item/totem_of_undying/console.png");
+        PackBuilder.BuildReport report = assertDoesNotThrow(() -> build(dir, Selection.of(Map.of("totem", "dev.zip"))));
+        assertEquals(List.of("dev.zip:" + com1, "dev.zip:" + nul, "dev.zip:" + con), report.skippedEntries());
+        assertTrue(Files.exists(out(dir, TOTEM)));
+        assertTrue(Files.exists(out(dir, "textures/item/totem_of_undying/console.png")), "only exact device names");
+        assertEquals(2, report.filesWritten());
+        for (String bad : List.of("assets/minecraft/textures/item/con.png", "assets/minecraft/textures/item/nul.png.mcmeta",
+                "assets/minecraft/textures/aux/x.png", "assets/prn/x.png", "assets/minecraft/lpt9.json",
+                "assets/minecraft/com1")) {
+            assertFalse(PackPath.isSafeOutput(bad), bad);
+        }
+        assertTrue(PackPath.isSafeOutput("assets/minecraft/textures/item/com10.png"));
+        assertTrue(PackPath.isSafeOutput("assets/minecraft/textures/item/conduit.png"));
+    }
+
+    @Test
     void overlappingCategoriesLaterInRegistryWins(@TempDir Path dir) throws IOException {
         String json = "{\"categories\":["
                 + "{\"id\":\"first\",\"group\":\"g\",\"displayName\":\"F\",\"previewPath\":\"p\",\"paths\":[\"textures/item/shared.png\"]},"

@@ -49,8 +49,9 @@ public final class PackBuilder {
     private PackBuilder() {}
 
     /**
-     * @param skippedEntries {@code packId:entry} of source entries that could not be read (corrupt zip entry, locked
-     *     file) and were left out; the rest of the pack is still used
+     * @param skippedEntries {@code packId:entry} of source entries that were left out: unreadable (corrupt zip entry,
+     *     locked file), larger than {@link #MAX_ENTRY_BYTES}, unsafe paths (traversal, Windows device names, invalid
+     *     characters) or unparseable model json; the rest of the pack is still used
      */
     public record BuildReport(int filesWritten, List<String> missingPacks, List<String> skippedEntries) {
         public BuildReport {
@@ -327,6 +328,7 @@ public final class PackBuilder {
             data = rewriteModel(data);
             if (data == null) {
                 LOG.log(System.Logger.Level.WARNING, "Skipping unparseable model " + p.rawEntry() + " in " + p.packId());
+                skipped.add(p.packId() + ":" + p.rawEntry());
                 return false;
             }
         }
