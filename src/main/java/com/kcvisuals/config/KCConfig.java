@@ -92,35 +92,51 @@ public class KCConfig {
             backup(file);
             return cfg;
         }
+        // The hud slot is loaded first and on its own: a broken module must never cost the user their layout.
         try {
-            JsonElement mods = root.get("modules");
-            if (mods != null && mods.isJsonObject()) {
-                for (Module m : modules.all()) {
-                    JsonElement me = mods.getAsJsonObject().get(m.id());
-                    if (me == null || !me.isJsonObject()) {
-                        continue;
-                    }
-                    JsonObject mo = me.getAsJsonObject();
-                    JsonElement st = mo.get("settings");
-                    if (st != null && st.isJsonObject()) {
-                        for (Setting<?> s : m.settings()) {
-                            s.fromJson(st.getAsJsonObject().get(s.key()));
-                        }
-                    }
-                    JsonElement en = mo.get("enabled");
-                    if (en != null && en.isJsonPrimitive() && en.getAsJsonPrimitive().isBoolean()) {
-                        m.setEnabled(en.getAsBoolean());
-                    }
-                }
-            }
             JsonElement h = root.get("hud");
             if (h != null && h.isJsonObject()) {
                 cfg.hud = h.getAsJsonObject();
             }
         } catch (RuntimeException e) {
-            LOG.error("Fehler beim Lesen der Konfiguration", e);
+            LOG.error("Fehler beim Lesen der HUD-Konfiguration", e);
+        }
+        JsonElement mods = root.get("modules");
+        if (mods != null && mods.isJsonObject()) {
+            for (Module m : modules.all()) {
+                try {
+                    loadModule(m, mods.getAsJsonObject().get(m.id()));
+                } catch (RuntimeException e) {
+                    LOG.error("Fehler beim Lesen des Moduls {}", m.id(), e);
+                }
+            }
         }
         return cfg;
+    }
+
+    private static void loadModule(Module m, JsonElement me) {
+        if (me == null || !me.isJsonObject()) {
+            return;
+        }
+        JsonObject mo = me.getAsJsonObject();
+        JsonElement st = mo.get("settings");
+        if (st != null && st.isJsonObject()) {
+            for (Setting<?> s : m.settings()) {
+                try {
+                    s.fromJson(st.getAsJsonObject().get(s.key()));
+                } catch (RuntimeException e) {
+                    LOG.error("Fehler beim Lesen der Einstellung {}.{}", m.id(), s.key(), e);
+                }
+            }
+        }
+        JsonElement en = mo.get("enabled");
+        if (en != null && en.isJsonPrimitive() && en.getAsJsonPrimitive().isBoolean()) {
+            try {
+                m.setEnabled(en.getAsBoolean());
+            } catch (RuntimeException e) {
+                LOG.error("Modul {} konnte nicht aktiviert werden", m.id(), e);
+            }
+        }
     }
 
     private static void backup(Path file) {

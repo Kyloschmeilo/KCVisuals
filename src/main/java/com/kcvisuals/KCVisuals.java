@@ -2,6 +2,8 @@ package com.kcvisuals;
 
 import com.kcvisuals.gui.KCScreen;
 import com.kcvisuals.config.KCConfig;
+import com.kcvisuals.hud.HudManager;
+import com.kcvisuals.hud.HudRenderer;
 import com.kcvisuals.module.ModuleManager;
 import java.io.IOException;
 import net.fabricmc.api.ClientModInitializer;
@@ -50,8 +52,11 @@ public class KCVisuals implements ClientModInitializer {
         } catch (IOException e) {
             LOGGER.error("Konnte KC-Visuals-Ordner nicht anlegen", e);
         }
-        // Modules register themselves into MODULES before this point (Tasks 9-11).
+        // Registration order is explicit: everything that owns persisted state must exist before the config is read.
+        registerModules();
         config = KCConfig.load(paths.config(), MODULES);
+        HudManager.get().fromJson(config.hud());
+        HudRenderer.register();
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> saveConfig());
         com.kcvisuals.pack.StartupApply.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
@@ -59,6 +64,15 @@ public class KCVisuals implements ClientModInitializer {
                     openMenu();
                     return 1;
                 })));
+    }
+
+    /**
+     * Single registration step; runs before {@link KCConfig#load}. Tasks 9-11 add their visual modules here with
+     * {@code MODULES.register(new ...())} (one line per module); the order of the calls is the order in the Visuals tab.
+     * The HUD elements are not modules: {@link HudManager} owns them and their state is stored in the config's hud slot.
+     */
+    private static void registerModules() {
+        // Task 9-11: MODULES.register(...)
     }
 
     /** Opens the menu on the next client tick (chat closes the current screen after a command runs). */

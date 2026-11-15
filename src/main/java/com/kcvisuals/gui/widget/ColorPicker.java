@@ -10,13 +10,13 @@ import net.minecraft.client.gui.DrawContext;
  * owners should either leave room or draw it last.
  */
 public class ColorPicker extends Widget {
-    public static final int EXPANDED_H = 70;
+    public static final int EXPANDED_H = 86;
 
     private final String label;
     private float hue, sat, val;
     private int alpha = 0xFF;
     private boolean expanded;
-    private int dragging; // 0 none, 1 square, 2 hue
+    private int dragging; // 0 none, 1 square, 2 hue, 3 alpha
     private final IntConsumer onChange;
 
     public ColorPicker(int x, int y, int w, int h, String label, int argb, IntConsumer onChange) {
@@ -93,7 +93,7 @@ public class ColorPicker extends Widget {
     }
 
     private int squareSize() {
-        return EXPANDED_H - 8;
+        return EXPANDED_H - 8 - ALPHA_H - 4;
     }
 
     private int hueX() {
@@ -101,6 +101,19 @@ public class ColorPicker extends Widget {
     }
 
     private static final int HUE_W = 10;
+    private static final int ALPHA_H = 10;
+
+    private int alphaX() {
+        return squareX();
+    }
+
+    private int alphaY() {
+        return squareY() + squareSize() + 4;
+    }
+
+    private int alphaW() {
+        return squareSize() + 6 + HUE_W;
+    }
 
     @Override
     public boolean isMouseOver(double mx, double my) {
@@ -119,10 +132,15 @@ public class ColorPicker extends Widget {
         int ty = y + (h - 8) / 2 + 1;
         Draw.text(ctx, label, x + 6, ty, Theme.TEXT);
         String hex = String.format("#%06X", color() & 0xFFFFFF);
+        if (alpha != 0xFF) {
+            hex += " " + Math.round(alpha * 100 / 255f) + "%";
+        }
         int sw = 14;
         int sx = x + w - sw - 6;
         Draw.text(ctx, hex, sx - 6 - Draw.font().getWidth(hex), ty, Theme.TEXT_DIM);
-        Draw.roundRect(ctx, sx, y + (h - 10) / 2, sw, 10, 3, color() | 0xFF000000);
+        // checkerboard behind the swatch so transparency is visible
+        Draw.roundRect(ctx, sx, y + (h - 10) / 2, sw, 10, 3, 0xFF5A5A6E);
+        Draw.roundRect(ctx, sx, y + (h - 10) / 2, sw, 10, 3, color());
         Draw.roundBorderPx(ctx, sx, y + (h - 10) / 2, sw, 10, 3, 1, 0x40FFFFFF);
         if (!expanded) {
             return;
@@ -148,6 +166,23 @@ public class ColorPicker extends Widget {
         int hy = qy + Math.round(hue * (qs - 1));
         ctx.fill(hx - 1, hy - 1, hx + HUE_W + 1, hy + 2, 0xFFFFFFFF);
         ctx.fill(hx, hy, hx + HUE_W, hy + 1, pure);
+        // alpha strip: checkerboard, then transparent -> opaque gradient of the current colour
+        int ax = alphaX(), ay = alphaY(), aw = alphaW();
+        for (int i = 0; i < aw; i += 4) {
+            for (int j = 0; j < ALPHA_H; j += 4) {
+                boolean light = ((i / 4) + (j / 4)) % 2 == 0;
+                ctx.fill(ax + i, ay + j, Math.min(ax + aw, ax + i + 4), Math.min(ay + ALPHA_H, ay + j + 4),
+                        light ? 0xFF8A8A9C : 0xFF55556A);
+            }
+        }
+        int rgb = hsvToRgb(hue, sat, val) & 0xFFFFFF;
+        for (int i = 0; i < aw; i++) {
+            int a = Math.round(255f * i / (aw - 1));
+            ctx.fill(ax + i, ay, ax + i + 1, ay + ALPHA_H, (a << 24) | rgb);
+        }
+        int kx = ax + Math.round(alpha / 255f * (aw - 1));
+        ctx.fill(kx - 1, ay - 1, kx + 2, ay + ALPHA_H + 1, 0xFFFFFFFF);
+        ctx.fill(kx, ay, kx + 1, ay + ALPHA_H, 0xFF202030);
     }
 
     @Override
@@ -172,6 +207,11 @@ public class ColorPicker extends Widget {
             update(mx, my);
             return true;
         }
+        if (Draw.inside(mx, my, alphaX() - 2, alphaY() - 1, alphaW() + 4, ALPHA_H + 2)) {
+            dragging = 3;
+            update(mx, my);
+            return true;
+        }
         return Draw.inside(mx, my, x, y + h, w, EXPANDED_H);
     }
 
@@ -183,6 +223,8 @@ public class ColorPicker extends Widget {
             val = 1 - fy;
         } else if (dragging == 2) {
             hue = Math.min(0.999f, fy);
+        } else if (dragging == 3) {
+            alpha = Math.round(255f * (float) Math.max(0, Math.min(1, (mx - alphaX()) / (alphaW() - 1))));
         }
         if (onChange != null) {
             onChange.accept(color());

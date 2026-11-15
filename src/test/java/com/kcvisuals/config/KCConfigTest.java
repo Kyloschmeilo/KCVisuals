@@ -113,4 +113,31 @@ class KCConfigTest {
         assertFalse(m.get(Demo.class).enabled());
         assertNotNull(cfg.hud());
     }
+
+    static class Exploding extends Module {
+        Exploding() {
+            super("boom", "Boom", "wirft beim Laden");
+        }
+
+        @Override
+        public void onEnable() {
+            throw new IllegalStateException("kaputt");
+        }
+    }
+
+    @Test
+    void badModuleDoesNotDropHud(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("c.json");
+        Files.writeString(file, "{\"modules\":{\"boom\":{\"enabled\":true},\"demo\":{\"enabled\":true}},"
+                + "\"hud\":{\"layout\":{\"x\":1}}}");
+        ModuleManager m = new ModuleManager();
+        m.register(new Exploding());
+        m.register(new Demo());
+        KCConfig cfg = KCConfig.load(file, m);
+        assertTrue(m.get(Demo.class).enabled(), "modules after the broken one still load");
+        assertEquals(1, cfg.hud().getAsJsonObject("layout").get("x").getAsInt());
+        Path out = dir.resolve("out.json");
+        cfg.save(out, m);
+        assertTrue(Files.readString(out).contains("\"layout\""), "hud survives the next save");
+    }
 }

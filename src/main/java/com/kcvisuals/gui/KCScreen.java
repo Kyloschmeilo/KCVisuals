@@ -51,6 +51,7 @@ public class KCScreen extends Screen {
         this.packSession = new PackSession(KCVisuals.pathsOrDefault());
         registerTab(Tab.PACKS, new PacksTab(packSession));
         registerTab(Tab.VISUALS, new com.kcvisuals.gui.visuals.VisualsTab(KCVisuals.modules()));
+        registerTab(Tab.HUD, new com.kcvisuals.gui.hud.HudTab(parent));
         registerTab(Tab.PROFILES, new ProfilesTab(packSession));
     }
 
