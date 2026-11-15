@@ -116,4 +116,18 @@ class PackScannerTest {
         PackIndex idx = PackScanner.scan(dir, reg);
         assertEquals(Set.of("obsidian"), idx.packs().get("DirPack").categories());
     }
+
+    @Test
+    void legacyIconsAtlasNotCountedAsHud(@TempDir Path dir) throws IOException {
+        zip(dir, "atlas.zip", "assets/minecraft/textures/gui/icons.png", "assets/minecraft/textures/gui/widgets.png");
+        PackIndex idx = PackScanner.scan(dir, reg);
+        assertEquals(Set.of(), idx.packs().get("atlas.zip").categories());
+    }
+
+    @Test
+    void uppercaseEntryMatches(@TempDir Path dir) throws IOException {
+        zip(dir, "caps.zip", "assets/minecraft/textures/item/Diamond_Sword.PNG");
+        PackIndex idx = PackScanner.scan(dir, reg);
+        assertEquals(Set.of("swords"), idx.packs().get("caps.zip").categories());
+    }
 }

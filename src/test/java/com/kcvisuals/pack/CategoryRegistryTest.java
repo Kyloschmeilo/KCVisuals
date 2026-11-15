@@ -78,4 +78,21 @@ class CategoryRegistryTest {
         assertEquals("textures/gui/sprites/hud/hotbar.png", LegacyPaths.normalise("textures/gui/sprites/hud/hotbar.png"));
         assertEquals("models/item/gold_ingot.json", LegacyPaths.normalise("models/item/gold_ingot.json"));
     }
+
+    @Test
+    void fireLayerLegacyMapsToFire() throws IOException {
+        assertEquals("textures/block/fire_0.png", LegacyPaths.normalise("textures/blocks/fire_layer_0.png"));
+        assertEquals("textures/block/fire_1.png.mcmeta", LegacyPaths.normalise("textures/blocks/fire_layer_1.png.mcmeta"));
+        assertTrue(bundled().get("fire").matches(LegacyPaths.normalise("textures/blocks/fire_layer_0.png")));
+    }
+
+    @Test
+    void legacyPotionBottleMapsToPotions() throws IOException {
+        assertEquals("textures/item/potion.png", LegacyPaths.normalise("textures/items/potion_bottle_drinkable.png"));
+        assertEquals("textures/item/splash_potion.png", LegacyPaths.normalise("textures/items/potion_bottle_splash.png"));
+        assertEquals("textures/item/lingering_potion.png", LegacyPaths.normalise("textures/items/potion_bottle_lingering.png"));
+        assertEquals("textures/item/glass_bottle.png", LegacyPaths.normalise("textures/items/potion_bottle_empty.png"));
+        assertEquals("textures/item/potion_overlay.png", LegacyPaths.normalise("textures/items/potion_overlay.png"));
+        assertTrue(bundled().get("potions").matches(LegacyPaths.normalise("textures/items/potion_bottle_splash.png")));
+    }
 }

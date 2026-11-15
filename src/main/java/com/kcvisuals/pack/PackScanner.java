@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 public final class PackScanner {
     private static final System.Logger LOG = System.getLogger("kcvisuals");
     private static final String ASSETS_PREFIX = "assets/minecraft/";
-    private static final int INDEX_VERSION = 1;
+    private static final int INDEX_VERSION = 2;
 
     private PackScanner() {}
 
@@ -87,7 +87,7 @@ public final class PackScanner {
             if (!entry.startsWith(ASSETS_PREFIX)) {
                 continue;
             }
-            String rel = entry.substring(ASSETS_PREFIX.length());
+            String rel = entry.substring(ASSETS_PREFIX.length()).toLowerCase(java.util.Locale.ROOT);
             String norm = LegacyPaths.normalise(rel);
             remaining.removeIf(c -> {
                 boolean hit = c.matches(rel) || (!norm.equals(rel) && c.matches(norm));

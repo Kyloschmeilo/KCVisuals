@@ -253,7 +253,7 @@
       "id": "hotbar", "group": "Interface", "displayName": "Hotbar",
       "previewPath": "textures/gui/sprites/hud/hotbar.png",
       "paths": [
-        "textures/gui/sprites/hud/hotbar*", "textures/gui/widgets.png*"
+        "textures/gui/sprites/hud/hotbar*"
       ]
     },
     {
@@ -263,7 +263,7 @@
         "textures/gui/sprites/hud/heart/*", "textures/gui/sprites/hud/food_*", "textures/gui/sprites/hud/armor_*",
         "textures/gui/sprites/hud/air*", "textures/gui/sprites/hud/experience_bar*", "textures/gui/sprites/hud/effect_*",
         "textures/gui/sprites/hud/jump_bar*", "textures/gui/sprites/hud/locator_bar*",
-        "textures/gui/icons.png*", "textures/mob_effect/*"
+        "textures/mob_effect/*"
       ]
     },
     {

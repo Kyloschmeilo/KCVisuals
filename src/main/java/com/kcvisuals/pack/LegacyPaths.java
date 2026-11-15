@@ -27,14 +27,16 @@ public final class LegacyPaths {
             "apple_golden", "golden_apple",
             "bow_standby", "bow",
             "fireball", "fire_charge",
-            "bottle_drinkable", "potion",
-            "bottle_splash", "splash_potion",
-            "bottle_lingering", "lingering_potion",
-            "bottle_empty", "glass_bottle");
+            "potion_bottle_drinkable", "potion",
+            "potion_bottle_splash", "splash_potion",
+            "potion_bottle_lingering", "lingering_potion",
+            "potion_bottle_empty", "glass_bottle");
 
     /** Prefix renames for single files whose folder or name changed (the trailing dot keeps the extension). */
     private static final Map<String, String> PREFIX_RENAMES = Map.of(
             "textures/block/web.", "textures/block/cobweb.",
+            "textures/block/fire_layer_0.", "textures/block/fire_0.",
+            "textures/block/fire_layer_1.", "textures/block/fire_1.",
             "textures/entity/elytra.", "textures/entity/equipment/wings/elytra.",
             "textures/entity/arrow.", "textures/entity/projectiles/arrow.",
             "textures/entity/spectral_arrow.", "textures/entity/projectiles/spectral_arrow.",
