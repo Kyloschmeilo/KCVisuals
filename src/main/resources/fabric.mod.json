@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "kcvisuals",
+  "version": "${version}",
+  "name": "KC Visuals",
+  "description": "Resource-Pack-Composer und Visual-Module",
+  "authors": ["KC"],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/kcvisuals/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.kcvisuals.KCVisuals"],
+    "modmenu": ["com.kcvisuals.compat.ModMenuIntegration"]
+  },
+  "mixins": ["kcvisuals.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.11",
+    "java": ">=21"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
