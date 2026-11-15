@@ -398,4 +398,92 @@ class PackBuilderTest {
         JsonObject totem = JsonParser.parseString(Files.readString(out(dir, "models/item/totem_of_undying.json"))).getAsJsonObject();
         assertEquals("item/totem_base", totem.get("parent").getAsString());
     }
+
+    // ---- untrusted pack hardening ----
+
+    /** Every regular file under {@code dir} except the source zips, as paths relative to {@code dir}. */
+    static List<String> filesOutsidePacks(Path dir) throws IOException {
+        try (var walk = Files.walk(dir)) {
+            return walk.filter(Files::isRegularFile)
+                    .map(p -> dir.relativize(p).toString().replace('\\', '/'))
+                    .filter(p -> !p.startsWith("packs/"))
+                    .sorted().toList();
+        }
+    }
+
+    @Test
+    void traversalEntryIsNotWrittenOutsidePack(@TempDir Path root) throws IOException {
+        Path dir = Files.createDirectories(root.resolve("a/b/c"));
+        String evil = MC + "textures/item/totem_of_undying/../../../../../../../../escape.png";
+        String evilBackslash = "assets\\minecraft\\textures\\item\\totem_of_undying\\..\\..\\..\\..\\..\\..\\..\\..\\esc2.png";
+        zip(dir.resolve("packs"), "A.zip", MC + TOTEM, evil, evilBackslash);
+        PackBuilder.BuildReport report = assertDoesNotThrow(() -> build(dir, Selection.of(Map.of("totem", "A.zip"))));
+        assertEquals(1, report.filesWritten());
+        assertTrue(Files.exists(out(dir, TOTEM)));
+        try (var walk = Files.walk(root)) {
+            assertEquals(List.of(), walk.map(p -> p.getFileName().toString())
+                    .filter(n -> n.startsWith("esc")).toList(), "nothing may escape the pack");
+        }
+        assertTrue(report.skippedEntries().contains("A.zip:" + evil), report.skippedEntries().toString());
+        assertEquals(2, report.skippedEntries().size(), report.skippedEntries().toString());
+    }
+
+    @Test
+    void traversalModelRefIsIgnored(@TempDir Path root) throws IOException {
+        Path dir = Files.createDirectories(root.resolve("a/b/c"));
+        zip(dir.resolve("packs"), "A.zip", Map.of(
+                MC + "models/item/totem_of_undying.json",
+                "{\"parent\":\"minecraft:../../../../../../evil\",\"textures\":{\"layer0\":\"item/../../../../../../../evil2\","
+                        + "\"layer1\":\"../../../../../../../../evil3\"}}",
+                MC + "models/../../../../../../evil.json", "{}",
+                MC + "textures/item/../../../../../../../evil2.png", "x",
+                "assets/../../../../../../../../evil3.png", "x"));
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        assertEquals(List.of("out/" + MC + "models/item/totem_of_undying.json", "out/pack.mcmeta"), filesOutsidePacks(dir));
+        try (var walk = Files.walk(root)) {
+            assertEquals(List.of(), walk.map(p -> p.getFileName().toString()).filter(n -> n.startsWith("evil")).toList());
+        }
+    }
+
+    @Test
+    void namespaceWithSlashRejected(@TempDir Path dir) throws IOException {
+        assertNull(ModelClosure.resolve("a/b:item/x", "models/", ".json"));
+        assertNull(ModelClosure.resolve("minecraft:../x", "models/", ".json"));
+        assertNull(ModelClosure.resolve("..:item/x", "models/", ".json"));
+        assertNull(ModelClosure.resolve("c:/windows/x", "textures/", ".png"));
+        assertEquals("assets/my_pack/models/item/x.json", ModelClosure.resolve("My_Pack:item/X", "models/", ".json"));
+        for (String bad : List.of("assets/minecraft/../x.png", "assets/./x.png", "assets/minecraft//x.png",
+                "assets/.../x.png", "assets/C:/x.png", "assets/minecraft/a\b.png", "assets//x.png",
+                "assets/minecraft/x/..", "assets/minecraft/./x.png")) {
+            assertNull(PackPath.output(bad), bad);
+            assertFalse(PackPath.isSafeOutput(bad), bad);
+        }
+        assertTrue(PackPath.isSafeOutput("assets/minecraft/textures/item/x.png.mcmeta"));
+
+        zip(dir.resolve("packs"), "A.zip", Map.of(
+                MC + "models/item/totem_of_undying.json", "{\"parent\":\"a/b:item/x\"}",
+                "assets/a/b/models/item/x.json", "{}"));
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        assertFalse(Files.exists(outAny(dir, "assets/a/b/models/item/x.json")));
+    }
+
+    @Test
+    void oversizedEntrySkipped(@TempDir Path dir) throws IOException {
+        Files.createDirectories(dir.resolve("packs"));
+        try (ZipOutputStream z = new ZipOutputStream(Files.newOutputStream(dir.resolve("packs/big.zip")))) {
+            z.putNextEntry(new ZipEntry(MC + TOTEM));
+            byte[] chunk = new byte[1 << 20];
+            for (int i = 0; i <= PackBuilder.MAX_ENTRY_BYTES / chunk.length; i++) {
+                z.write(chunk);
+            }
+            z.closeEntry();
+            z.putNextEntry(new ZipEntry(MC + "models/item/totem_of_undying.json"));
+            z.write("{}".getBytes(StandardCharsets.UTF_8));
+            z.closeEntry();
+        }
+        PackBuilder.BuildReport report = build(dir, Selection.of(Map.of("totem", "big.zip")));
+        assertEquals(List.of("big.zip:" + MC + TOTEM), report.skippedEntries());
+        assertFalse(Files.exists(out(dir, TOTEM)));
+        assertTrue(Files.exists(out(dir, "models/item/totem_of_undying.json")));
+    }
 }

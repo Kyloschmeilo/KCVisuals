@@ -25,6 +25,10 @@ import java.util.TreeMap;
  * same way the files are written.
  */
 final class ModelClosure {
+    private static final System.Logger LOG = System.getLogger("kcvisuals");
+    private static final java.util.regex.Pattern NAMESPACE = java.util.regex.Pattern.compile("[a-z0-9_.-]+");
+    private static final java.util.regex.Pattern RESOURCE_PATH = java.util.regex.Pattern.compile("[a-z0-9/._-]+");
+
     private ModelClosure() {}
 
     /** Output path to raw entry for every file of the pack; a modern entry wins over a legacy one mapping to it. */
@@ -139,7 +143,9 @@ final class ModelClosure {
         int colon = lower.indexOf(':');
         String ns = colon < 0 ? "minecraft" : lower.substring(0, colon);
         String path = lower.substring(colon + 1);
-        if (ns.isEmpty() || path.isEmpty()) {
+        // Untrusted ref: the namespace is one segment; the path may not climb out (checked again by PackPath.output).
+        if (!NAMESPACE.matcher(ns).matches() || ns.chars().allMatch(c -> c == '.')
+                || !RESOURCE_PATH.matcher(path).matches()) {
             return null;
         }
         return PackPath.output("assets/" + ns + "/" + dir + path + ext);
@@ -155,11 +161,21 @@ final class ModelClosure {
         return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString() ? el.getAsString() : null;
     }
 
-    /** Parsed json, or null if the entry cannot be read or parsed (the copy step reports unreadable entries). */
+    /**
+     * Parsed json, or null if the entry is unreadable, too large or malformed; its dependencies are then not followed
+     * (the copy step reports unreadable and oversized entries itself).
+     */
     private static JsonElement read(PackSource src, String raw) {
         try (InputStream in = src.open(raw)) {
-            return JsonParser.parseString(new String(in.readAllBytes(), StandardCharsets.UTF_8));
-        } catch (IOException | RuntimeException e) {
+            byte[] data = PackBuilder.readLimited(in);
+            if (data == null) {
+                return null;
+            }
+            return JsonParser.parseString(new String(data, StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            return null;
+        } catch (RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "Malformed json " + raw + " in " + src.id() + ", dependencies not followed: " + e);
             return null;
         }
     }

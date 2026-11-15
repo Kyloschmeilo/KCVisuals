@@ -41,9 +41,9 @@ public final class PackBuilder {
     /** Resource pack format of Minecraft 1.21.11 ({@code version.json} → {@code pack_version.resource_major}). */
     public static final int PACK_FORMAT = 75;
     public static final String DESCRIPTION = "KC Visuals Custom";
+    /** Largest single entry that is read (zip-bomb guard); bigger entries are skipped and reported. */
+    static final int MAX_ENTRY_BYTES = 32 * 1024 * 1024;
 
-    /** Characters Minecraft accepts in a namespace and identifier path; anything else would be rejected when loading. */
-    private static final Pattern VALID_OUTPUT = Pattern.compile("assets/[a-z0-9_.-]+/[a-z0-9/._-]+");
     private static final Pattern MODEL_JSON = Pattern.compile("assets/[^/]+/models/.+\\.json");
 
     private PackBuilder() {}
@@ -97,9 +97,9 @@ public final class PackBuilder {
             Files.createDirectories(outDir);
             recoverInterruptedSwap(outDir.resolve("assets"), trash);
             deleteRecursively(staging);
-            Map<String, Planned> plan = plan(sel, index, reg, opener, open, missing);
+            Map<String, Planned> plan = plan(sel, index, reg, opener, open, missing, skipped);
             for (Planned p : plan.values()) {
-                if (copy(open.get(p.packId()), p, staging.resolve(p.outPath()), writer, skipped)) {
+                if (copy(open.get(p.packId()), p, staging, writer, skipped)) {
                     written++;
                 }
             }
@@ -141,7 +141,7 @@ public final class PackBuilder {
      * closure files the first category in registry order wins.
      */
     private static Map<String, Planned> plan(Selection sel, PackIndex index, CategoryRegistry reg,
-            PackScanner.PackOpener opener, Map<String, PackSource> open, List<String> missing) {
+            PackScanner.PackOpener opener, Map<String, PackSource> open, List<String> missing, List<String> skipped) {
         Map<String, Planned> explicit = new LinkedHashMap<>();
         Map<String, Planned> closure = new LinkedHashMap<>();
         Map<String, Map<String, String>> outputIndexes = new HashMap<>();
@@ -161,7 +161,9 @@ public final class PackBuilder {
                     continue;
                 }
                 String out = PackPath.MC_ASSETS + path.modern();
-                if (!VALID_OUTPUT.matcher(out).matches()) {
+                if (!PackPath.isSafeOutput(out)) {
+                    LOG.log(System.Logger.Level.WARNING, "Skipping unsafe or invalid path " + entry + " in " + packId);
+                    skipped.add(packId + ":" + entry);
                     continue;
                 }
                 Planned prev = forCategory.get(out);
@@ -177,7 +179,7 @@ public final class PackBuilder {
             Map<String, String> outIndex =
                     outputIndexes.computeIfAbsent(packId, id -> ModelClosure.outputIndex(src.entries()));
             for (Map.Entry<String, String> dep : ModelClosure.closure(src, outIndex, forCategory.keySet()).entrySet()) {
-                if (VALID_OUTPUT.matcher(dep.getKey()).matches()) {
+                if (PackPath.isSafeOutput(dep.getKey())) {
                     closure.putIfAbsent(dep.getKey(),
                             new Planned(packId, dep.getValue(), dep.getKey(), PackPath.isLegacyEntry(dep.getValue())));
                 }
@@ -298,11 +300,24 @@ public final class PackBuilder {
      * Returns false if the entry was left out. Read errors of the source (corrupt zip entry, locked file) skip just
      * that entry and are recorded in {@code skipped}; write errors into staging fail the whole build.
      */
-    private static boolean copy(PackSource src, Planned p, Path target, EntryWriter writer, List<String> skipped)
+    private static boolean copy(PackSource src, Planned p, Path staging, EntryWriter writer, List<String> skipped)
             throws IOException {
+        Path root = staging.toAbsolutePath().normalize();
+        Path target = root.resolve(p.outPath()).normalize();
+        if (!PackPath.isSafeOutput(p.outPath()) || !target.startsWith(root) || target.equals(root)) {
+            LOG.log(System.Logger.Level.WARNING, "Refusing to write " + p.outPath() + " outside the pack (" + p.packId() + ")");
+            skipped.add(p.packId() + ":" + p.rawEntry());
+            return false;
+        }
         byte[] data;
         try (InputStream in = src.open(p.rawEntry())) {
-            data = in.readAllBytes();
+            data = readLimited(in);
+            if (data == null) {
+                LOG.log(System.Logger.Level.WARNING, "Skipping " + p.rawEntry() + " in " + p.packId() + ": larger than "
+                        + MAX_ENTRY_BYTES + " bytes");
+                skipped.add(p.packId() + ":" + p.rawEntry());
+                return false;
+            }
         } catch (IOException | RuntimeException e) {
             LOG.log(System.Logger.Level.WARNING, "Skipping unreadable " + p.rawEntry() + " in " + p.packId() + ": " + e);
             skipped.add(p.packId() + ":" + p.rawEntry());
@@ -317,6 +332,12 @@ public final class PackBuilder {
         }
         writer.write(target, data);
         return true;
+    }
+
+    /** Reads at most {@link #MAX_ENTRY_BYTES}; returns null if the stream is longer. */
+    static byte[] readLimited(InputStream in) throws IOException {
+        byte[] data = in.readNBytes(MAX_ENTRY_BYTES + 1);
+        return data.length > MAX_ENTRY_BYTES ? null : data;
     }
 
     /**
@@ -390,7 +411,11 @@ public final class PackBuilder {
     private static void copyRecursively(Path from, Path to) throws IOException {
         try (java.util.stream.Stream<Path> walk = Files.walk(from)) {
             for (Path src : (Iterable<Path>) walk::iterator) {
-                Path dst = to.resolve(from.relativize(src).toString());
+                Path dst = to.resolve(from.relativize(src).toString()).normalize();
+                if (!dst.startsWith(to.normalize())) {
+                    LOG.log(System.Logger.Level.WARNING, "Refusing to copy " + src + " outside " + to);
+                    continue;
+                }
                 if (Files.isDirectory(src)) {
                     Files.createDirectories(dst);
                 } else {
