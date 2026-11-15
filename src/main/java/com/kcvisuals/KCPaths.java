@@ -29,14 +29,13 @@ public record KCPaths(Path root, Path config) {
     }
 
     public Path index() {
-        return root.resolve("index");
+        return root.resolve("index.json");
     }
 
     public void ensureDirs() throws IOException {
         Files.createDirectories(packs());
         Files.createDirectories(generatedPack());
         Files.createDirectories(profiles());
-        Files.createDirectories(index());
         Files.createDirectories(config.getParent());
     }
 }

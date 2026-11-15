@@ -18,5 +18,7 @@ class KCPathsTest {
         assertTrue(Files.isDirectory(tmp.resolve("kcvisuals/generated/KC Visuals Custom")));
         assertTrue(Files.isDirectory(tmp.resolve("kcvisuals/profiles")));
         assertEquals(tmp.resolve("config/kcvisuals.json"), p.config());
+        assertEquals(tmp.resolve("kcvisuals/index.json"), p.index());
+        assertTrue(!Files.exists(p.index()));
     }
 }
