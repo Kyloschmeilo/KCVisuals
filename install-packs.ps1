@@ -11,21 +11,33 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 $dest = Join-Path $Target 'kcvisuals\packs'
+
+# Validate sources before touching the target
+$sources = @()
+foreach ($sub in 'local', 'modrinth') {
+    $dir = Join-Path $repo "packs\$sub"
+    if (-not (Test-Path -LiteralPath $dir)) {
+        Write-Error "Missing source folder: $dir" -ErrorAction Continue
+        exit 1
+    }
+    $sources += @(Get-ChildItem -LiteralPath $dir -Filter '*.zip' -File)
+}
+if ($sources.Count -eq 0) {
+    Write-Error 'No zip files found in packs\local or packs\modrinth' -ErrorAction Continue
+    exit 1
+}
+
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 $copied = 0; $skipped = 0; $bytes = 0L
-foreach ($sub in 'local', 'modrinth') {
-    $dir = Join-Path $repo "packs\$sub"
-    if (-not (Test-Path -LiteralPath $dir)) { Write-Warning "Missing folder: $dir"; continue }
-    foreach ($f in Get-ChildItem -LiteralPath $dir -Filter '*.zip' -File) {
-        $out = Join-Path $dest $f.Name
-        if ((Test-Path -LiteralPath $out) -and ((Get-Item -LiteralPath $out).Length -eq $f.Length)) {
-            $skipped++
-        } else {
-            Copy-Item -LiteralPath $f.FullName -Destination $out -Force
-            $copied++
-            $bytes += $f.Length
-        }
+foreach ($f in $sources) {
+    $out = Join-Path $dest $f.Name
+    if ((Test-Path -LiteralPath $out) -and ((Get-Item -LiteralPath $out).Length -eq $f.Length)) {
+        $skipped++
+    } else {
+        [System.IO.File]::Copy($f.FullName, $out, $true)
+        $copied++
+        $bytes += $f.Length
     }
 }
 
