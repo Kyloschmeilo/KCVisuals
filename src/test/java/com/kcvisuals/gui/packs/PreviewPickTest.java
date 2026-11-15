@@ -108,6 +108,57 @@ class PreviewPickTest {
     }
 
     @Test
+    void itemsDefinitionTakesPrecedenceOverModelsItem() {
+        String tex = "assets/minecraft/textures/item/end_crystal.png";
+        String def = "assets/minecraft/items/end_crystal.json";
+        String model = "assets/minecraft/models/item/end_crystal.json";
+        String fancy = "assets/minecraft/models/item/crystal_3d.json";
+        String flat = "assets/minecraft/models/item/crystal_flat.json";
+        Set<String> e = Set.of(tex, def, model, fancy, flat);
+        // flat models/item/end_crystal.json, but the item definition points at a custom 3D model -> atlas
+        Map<String, String> toFancy = Map.of(
+                def, "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/crystal_3d\"}}",
+                model, GENERATED, fancy, CUSTOM_MODEL, flat, GENERATED);
+        assertTrue(PreviewPick.isModelAtlas(e, tex, 128, 128, reader(toFancy)));
+        // the reverse: custom models/item/end_crystal.json, but the item definition uses a flat model -> HD icon
+        Map<String, String> toFlat = Map.of(
+                def, "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"item/crystal_flat\"}}",
+                model, CUSTOM_MODEL, fancy, CUSTOM_MODEL, flat, GENERATED);
+        assertFalse(PreviewPick.isModelAtlas(e, tex, 128, 128, reader(toFlat)));
+        // without an item definition, models/item decides
+        assertTrue(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 128, 128, reader(toFlat)));
+        assertFalse(PreviewPick.isModelAtlas(Set.of(tex, model), tex, 128, 128, reader(toFancy)));
+    }
+
+    @Test
+    void readCappedReturnsNullForOversizedEntries() throws java.io.IOException {
+        byte[] ten = new byte[10];
+        assertArrayEquals(ten, PreviewPick.readCapped(new java.io.ByteArrayInputStream(ten), 10));
+        assertArrayEquals(ten, PreviewPick.readCapped(new java.io.ByteArrayInputStream(ten), 11));
+        assertNull(PreviewPick.readCapped(new java.io.ByteArrayInputStream(new byte[11]), 10));
+        // an endless stream is never buffered beyond the cap
+        java.io.InputStream endless = new java.io.InputStream() {
+            @Override
+            public int read() {
+                return 0;
+            }
+        };
+        assertNull(PreviewPick.readCapped(endless, 1024));
+        assertEquals(0, PreviewPick.readCapped(java.io.InputStream.nullInputStream(), 10).length);
+    }
+
+    @Test
+    void findEntryPrefersModernPathThenSortedOrder() {
+        String legacy = "assets/minecraft/textures/items/diamond_sword.png";
+        String modern = "assets/minecraft/textures/item/diamond_sword.png";
+        String modernUpper = "assets/minecraft/textures/item/Diamond_Sword.png";
+        Set<String> e = new LinkedHashSet<>(List.of(legacy, modernUpper, modern));
+        assertEquals(modernUpper, PreviewPick.findEntry(e, "textures/item/diamond_sword.png"));
+        assertEquals(legacy, PreviewPick.findEntry(Set.of(legacy), "textures/item/diamond_sword.png"));
+        assertNull(PreviewPick.findEntry(e, "textures/item/iron_sword.png"));
+    }
+
+    @Test
     void atlasRuleOnlyAppliesToItemTextures() {
         String entity = "assets/minecraft/textures/entity/end_crystal/end_crystal.png";
         String model = "assets/minecraft/models/item/end_crystal.json";

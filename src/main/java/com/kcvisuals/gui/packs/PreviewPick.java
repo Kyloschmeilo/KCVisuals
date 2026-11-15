@@ -5,13 +5,18 @@ import com.kcvisuals.pack.PackPath;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
 
-/** Chooses which entry of a pack to show as the preview for a category. Pure Java, unit tested. */
+/**
+ * Chooses which entry of a pack to show as the preview for a category, and whether that texture is a 3D-model atlas.
+ * No Minecraft classes (only Gson for the model JSON), unit tested.
+ */
 public final class PreviewPick {
     private PreviewPick() {}
 
@@ -43,6 +48,20 @@ public final class PreviewPick {
         return fallback;
     }
 
+    /** Upper bound for a preview PNG read from a pack; bigger entries get no preview (zip-bomb guard). */
+    public static final int MAX_IMAGE_BYTES = 8 << 20;
+    /** Upper bound for an item model / item definition JSON read for the atlas check. */
+    public static final int MAX_JSON_BYTES = 256 << 10;
+
+    /**
+     * Reads at most {@code max} bytes; returns null (instead of a truncated array) if the stream holds more, so an
+     * oversized or decompression-bomb entry never gets buffered in full.
+     */
+    public static byte[] readCapped(InputStream in, int max) throws IOException {
+        byte[] b = in.readNBytes(max + 1);
+        return b.length > max ? null : b;
+    }
+
     /** Largest frame side (GUI-icon sized textures are at most this) before a texture counts as a UV atlas. */
     static final int ICON_MAX = 32;
 
@@ -50,7 +69,9 @@ public final class PreviewPick {
      * True if the preview should not be shown as-is: the frame is larger than an icon ({@value #ICON_MAX} px on a
      * side) and the pack gives that item a custom, non-flat model, i.e. the texture is a UV atlas for a 3D model.
      * A large texture whose item model is a flat icon ({@code item/generated} or {@code item/handheld} parent with a
-     * {@code layer0}) is an HD icon and is not an atlas. {@code read} returns an entry's text, or null.
+     * {@code layer0}) is an HD icon and is not an atlas. The item definition {@code items/<name>.json} takes precedence
+     * (all models it references must be flat icons in the pack); {@code models/item/<name>.json} is only consulted when
+     * there is no item definition. {@code read} returns an entry's text, or null.
      */
     public static boolean isModelAtlas(Set<String> entries, String previewEntry, int frameW, int frameH,
             Function<String, String> read) {
@@ -62,36 +83,49 @@ public final class PreviewPick {
             return false;
         }
         String name = p.modern().substring("textures/item/".length(), p.modern().length() - ".png".length());
-        String modelEntry = findEntry(entries, "models/item/" + name + ".json");
-        if (modelEntry != null) {
-            return !isFlatIconModel(read.apply(modelEntry));
-        }
+        // Since 1.21.4 the item definition (items/<name>.json) decides which model is used; models/item/<name>.json
+        // only matters when the pack has no item definition for this item.
         String itemEntry = findEntry(entries, "items/" + name + ".json");
-        if (itemEntry == null) {
-            return false;
-        }
-        List<String> refs = itemModelRefs(read.apply(itemEntry));
-        if (refs.isEmpty()) {
-            return true;
-        }
-        for (String ref : refs) {
-            String refEntry = findEntry(entries, "models/" + stripNamespace(ref) + ".json");
-            if (refEntry == null || !isFlatIconModel(read.apply(refEntry))) {
+        if (itemEntry != null) {
+            List<String> refs = itemModelRefs(read.apply(itemEntry));
+            if (refs.isEmpty()) {
                 return true;
             }
+            for (String ref : refs) {
+                String refEntry = findEntry(entries, "models/" + stripNamespace(ref) + ".json");
+                if (refEntry == null || !isFlatIconModel(read.apply(refEntry))) {
+                    return true;
+                }
+            }
+            return false;
         }
-        return false;
+        String modelEntry = findEntry(entries, "models/item/" + name + ".json");
+        return modelEntry != null && !isFlatIconModel(read.apply(modelEntry));
     }
 
-    /** Entry whose path below {@code assets/minecraft/} (as found or legacy-mapped) equals {@code relative}. */
+    /**
+     * Entry whose path below {@code assets/minecraft/} equals {@code relative}. Deterministic: an entry already at
+     * that (modern) path wins over one that only matches after legacy mapping; ties go to the smallest entry name.
+     */
     static String findEntry(Set<String> entries, String relative) {
+        String exact = null;
+        String legacy = null;
         for (String e : entries) {
             PackPath q = PackPath.of(e);
-            if (q != null && (q.relative().equals(relative) || q.modern().equals(relative))) {
-                return e;
+            if (q == null) {
+                continue;
+            }
+            if (q.relative().equals(relative)) {
+                if (exact == null || e.compareTo(exact) < 0) {
+                    exact = e;
+                }
+            } else if (q.modern().equals(relative)) {
+                if (legacy == null || e.compareTo(legacy) < 0) {
+                    legacy = e;
+                }
             }
         }
-        return null;
+        return exact != null ? exact : legacy;
     }
 
     private static String stripNamespace(String id) {

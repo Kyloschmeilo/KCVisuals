@@ -156,7 +156,8 @@ public final class PreviewCache {
     /** Small text entry (item model JSON) of a pack, or null if unreadable. Worker thread. */
     private static String readText(PackSource src, String entry) {
         try (InputStream s = src.open(entry)) {
-            return new String(s.readNBytes(256 * 1024), java.nio.charset.StandardCharsets.UTF_8);
+            byte[] b = PreviewPick.readCapped(s, PreviewPick.MAX_JSON_BYTES);
+            return b == null ? null : new String(b, java.nio.charset.StandardCharsets.UTF_8);
         } catch (IOException | RuntimeException e) {
             return null;
         }
@@ -170,7 +171,8 @@ public final class PreviewCache {
                 return null;
             }
             try (InputStream s = in.get()) {
-                return new Raw(s.readAllBytes(), null, null);
+                byte[] b = PreviewPick.readCapped(s, PreviewPick.MAX_IMAGE_BYTES);
+                return b == null ? null : new Raw(b, null, null);
             }
         }
         PackSource src = source(packId);
@@ -182,7 +184,12 @@ public final class PreviewCache {
             return null;
         }
         try (InputStream s = src.open(entry)) {
-            return new Raw(s.readAllBytes(), src, entry);
+            byte[] b = PreviewPick.readCapped(s, PreviewPick.MAX_IMAGE_BYTES);
+            if (b == null) {
+                KCVisuals.LOGGER.warn("Preview {} in {} is larger than {} bytes, skipped", entry, packId, PreviewPick.MAX_IMAGE_BYTES);
+                return null;
+            }
+            return new Raw(b, src, entry);
         }
     }
 
