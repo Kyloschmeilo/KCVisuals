@@ -50,6 +50,7 @@ public class KCScreen extends Screen {
         this.parent = parent;
         this.packSession = new PackSession(KCVisuals.pathsOrDefault());
         registerTab(Tab.PACKS, new PacksTab(packSession));
+        registerTab(Tab.VISUALS, new com.kcvisuals.gui.visuals.VisualsTab(KCVisuals.modules()));
         registerTab(Tab.PROFILES, new ProfilesTab(packSession));
     }
 
@@ -254,6 +255,7 @@ public class KCScreen extends Screen {
             p.close();
         }
         packSession.close();
+        KCVisuals.saveConfig();
         super.removed();
     }
 
