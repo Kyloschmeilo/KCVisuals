@@ -15,6 +15,11 @@ public class KCVisuals implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("KC Visuals");
     private static KCPaths paths;
 
+    /** Paths, also usable before the client entrypoint has run (e.g. from mixins during client construction). */
+    public static KCPaths pathsOrDefault() {
+        return paths != null ? paths : KCPaths.of(FabricLoader.getInstance().getGameDir());
+    }
+
     public static KCPaths paths() {
         return paths;
     }

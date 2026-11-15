@@ -30,12 +30,12 @@ final class PackEntries {
         boolean rootAssets = false;
         Set<String> wrappers = new HashSet<>();
         for (String n : slashed.keySet()) {
-            if (n.startsWith("assets/")) {
+            if (n.regionMatches(true, 0, "assets/", 0, 7)) {
                 rootAssets = true;
                 break;
             }
             int slash = n.indexOf('/');
-            if (slash > 0 && n.startsWith("assets/", slash + 1)) {
+            if (slash > 0 && n.regionMatches(true, slash + 1, "assets/", 0, 7)) {
                 wrappers.add(n.substring(0, slash + 1));
             }
         }

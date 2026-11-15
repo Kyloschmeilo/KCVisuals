@@ -25,7 +25,6 @@ import java.util.stream.Stream;
 /** Scans a directory of resource packs (zips and folders) and records which categories each one touches. */
 public final class PackScanner {
     private static final System.Logger LOG = System.getLogger("kcvisuals");
-    private static final String ASSETS_PREFIX = "assets/minecraft/";
     private static final int INDEX_VERSION = 2;
 
     private PackScanner() {}
@@ -84,13 +83,12 @@ public final class PackScanner {
             if (remaining.isEmpty()) {
                 break;
             }
-            if (!entry.startsWith(ASSETS_PREFIX)) {
+            PackPath path = PackPath.of(entry);
+            if (path == null) {
                 continue;
             }
-            String rel = entry.substring(ASSETS_PREFIX.length()).toLowerCase(java.util.Locale.ROOT);
-            String norm = LegacyPaths.normalise(rel);
             remaining.removeIf(c -> {
-                boolean hit = c.matches(rel) || (!norm.equals(rel) && c.matches(norm));
+                boolean hit = path.in(c);
                 if (hit) {
                     found.add(c.id());
                 }
