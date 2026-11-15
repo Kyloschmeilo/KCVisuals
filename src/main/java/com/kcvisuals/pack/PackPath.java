@@ -22,6 +22,29 @@ public record PackPath(String relative, String modern) {
         return new PackPath(rel, LegacyPaths.normalise(rel));
     }
 
+    /**
+     * Output path for any namespace: {@code assets/<ns>/<rest>} lowercased, with {@link LegacyPaths} applied to the
+     * {@code minecraft} namespace. Null if the entry is not under {@code assets/<ns>/} (prefix case-insensitive).
+     */
+    public static String output(String entry) {
+        if (!entry.regionMatches(true, 0, "assets/", 0, 7)) {
+            return null;
+        }
+        int slash = entry.indexOf('/', 7);
+        if (slash <= 7 || slash == entry.length() - 1) {
+            return null;
+        }
+        String ns = entry.substring(7, slash).toLowerCase(Locale.ROOT);
+        String rest = entry.substring(slash + 1).toLowerCase(Locale.ROOT);
+        return "assets/" + ns + "/" + (ns.equals("minecraft") ? LegacyPaths.normalise(rest) : rest);
+    }
+
+    /** True if {@link #output} renamed the entry beyond lowercasing (a pre-1.13 / pre-1.21.4 path). */
+    public static boolean isLegacyEntry(String entry) {
+        String out = output(entry);
+        return out != null && !out.equals(entry.toLowerCase(Locale.ROOT));
+    }
+
     public boolean isLegacy() {
         return !modern.equals(relative);
     }

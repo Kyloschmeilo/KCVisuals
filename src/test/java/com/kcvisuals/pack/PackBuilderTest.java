@@ -295,4 +295,107 @@ class PackBuilderTest {
         assertFalse(Files.exists(dir.resolve(PackBuilder.STAGING_DIR)));
         assertFalse(Files.exists(dir.resolve(PackBuilder.TRASH_DIR)));
     }
+
+    // ---- model dependency closure ----
+
+    static Path outAny(Path dir, String fullPath) {
+        return dir.resolve("out").resolve(fullPath);
+    }
+
+    @Test
+    void modelParentFromSamePackIsCopied(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "mace.zip", Map.of(
+                MC + "models/item/totem_of_undying.json",
+                "{\"parent\":\"item/smaller_util\",\"textures\":{\"layer0\":\"item/totem_of_undying\"}}",
+                MC + "models/item/smaller_util.json", "{\"parent\":\"builtin/generated\"}",
+                MC + "models/item/unrelated.json", "{\"parent\":\"item/generated\"}"),
+                MC + TOTEM);
+        PackBuilder.BuildReport report = build(dir, Selection.of(Map.of("totem", "mace.zip")));
+        assertTrue(Files.exists(out(dir, "models/item/smaller_util.json")));
+        assertTrue(Files.exists(out(dir, "models/item/totem_of_undying.json")));
+        assertFalse(Files.exists(out(dir, "models/item/unrelated.json")));
+        assertEquals(3, report.filesWritten());
+    }
+
+    @Test
+    void textureReferencedByModelIsCopied(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "tex.zip", Map.of(
+                MC + "models/item/totem_of_undying.json",
+                "{\"parent\":\"item/generated\",\"textures\":{\"layer0\":\"item/custom_totem\",\"layer1\":\"mypack:item/glow\","
+                        + "\"particle\":\"#layer0\"}}"),
+                MC + "textures/item/custom_totem.png", MC + "textures/item/custom_totem.png.mcmeta",
+                "assets/mypack/textures/item/glow.png", MC + "textures/item/unused.png");
+        build(dir, Selection.of(Map.of("totem", "tex.zip")));
+        assertTrue(Files.exists(out(dir, "textures/item/custom_totem.png")));
+        assertTrue(Files.exists(out(dir, "textures/item/custom_totem.png.mcmeta")));
+        assertTrue(Files.exists(outAny(dir, "assets/mypack/textures/item/glow.png")), "other namespaces are kept");
+        assertFalse(Files.exists(out(dir, "textures/item/unused.png")));
+    }
+
+    @Test
+    void nestedItemsDefinitionModelsAreCopied(@TempDir Path dir) throws IOException {
+        String items = "{\"model\":{\"type\":\"minecraft:select\",\"property\":\"minecraft:display_context\","
+                + "\"cases\":[{\"when\":\"gui\",\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/totem_a\"}}],"
+                + "\"fallback\":{\"type\":\"minecraft:condition\",\"property\":\"minecraft:using_item\","
+                + "\"on_true\":{\"type\":\"minecraft:model\",\"model\":\"item/totem_b\"},"
+                + "\"on_false\":{\"type\":\"minecraft:range_dispatch\",\"property\":\"minecraft:count\","
+                + "\"entries\":[{\"threshold\":1,\"model\":{\"type\":\"minecraft:model\",\"model\":\"Custom:item/totem_c\"}}],"
+                + "\"fallback\":{\"type\":\"minecraft:special\",\"base\":\"item/totem_d\",\"model\":{\"type\":\"minecraft:head\"}}}}}}";
+        zip(dir.resolve("packs"), "items.zip", Map.of(
+                MC + "items/totem_of_undying.json", items,
+                MC + "models/item/totem_a.json", "{\"textures\":{\"layer0\":\"item/totem_a_tex\"}}",
+                MC + "models/item/totem_b.json", "{}",
+                "assets/custom/models/item/totem_c.json", "{}",
+                MC + "models/item/totem_d.json", "{}"),
+                MC + "textures/item/totem_a_tex.png");
+        build(dir, Selection.of(Map.of("totem", "items.zip")));
+        assertTrue(Files.exists(out(dir, "items/totem_of_undying.json")));
+        assertTrue(Files.exists(out(dir, "models/item/totem_a.json")));
+        assertTrue(Files.exists(out(dir, "textures/item/totem_a_tex.png")), "textures of closure models too");
+        assertTrue(Files.exists(out(dir, "models/item/totem_b.json")));
+        assertTrue(Files.exists(outAny(dir, "assets/custom/models/item/totem_c.json")));
+        assertTrue(Files.exists(out(dir, "models/item/totem_d.json")), "special model base");
+    }
+
+    @Test
+    void closureCycleTerminates(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "cycle.zip", Map.of(
+                MC + "models/item/totem_of_undying.json", "{\"parent\":\"item/loop_a\"}",
+                MC + "models/item/loop_a.json", "{\"parent\":\"item/loop_b\"}",
+                MC + "models/item/loop_b.json", "{\"parent\":\"minecraft:item/loop_a\"}"));
+        PackBuilder.BuildReport report = assertTimeoutPreemptively(java.time.Duration.ofSeconds(5),
+                () -> build(dir, Selection.of(Map.of("totem", "cycle.zip"))));
+        assertEquals(3, report.filesWritten());
+    }
+
+    @Test
+    void closureDoesNotOverrideOtherCategorySelection(@TempDir Path dir) throws IOException {
+        // swords comes before totem in the registry, so a naive "later wins" would let totem's closure overwrite it.
+        zip(dir.resolve("packs"), "A.zip", Map.of(
+                MC + "models/item/totem_of_undying.json", "{\"textures\":{\"layer0\":\"item/diamond_sword\"}}",
+                MC + SWORD, "A"));
+        zip(dir.resolve("packs"), "B.zip", Map.of(MC + SWORD, "B"));
+        Map<String, String> sel = new LinkedHashMap<>();
+        sel.put("totem", "A.zip");
+        sel.put("swords", "B.zip");
+        build(dir, Selection.of(sel));
+        assertEquals("B", Files.readString(out(dir, SWORD)));
+    }
+
+    @Test
+    void closureFromLegacyPathsWrittenModern(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "old.zip", Map.of(
+                MC + "models/item/totem.json", "{\"parent\":\"item/Totem_Base\",\"textures\":{\"layer0\":\"items/totem_glow\"}}",
+                MC + "models/item/totem_base.json", "{\"textures\":{\"layer1\":\"items/gold_sword\"}}"),
+                MC + "textures/items/totem_glow.png", MC + "textures/items/gold_sword.png");
+        build(dir, Selection.of(Map.of("totem", "old.zip")));
+        assertTrue(Files.exists(out(dir, "models/item/totem_of_undying.json")));
+        assertTrue(Files.exists(out(dir, "models/item/totem_base.json")));
+        assertTrue(Files.exists(out(dir, "textures/item/totem_glow.png")));
+        assertTrue(Files.exists(out(dir, "textures/item/golden_sword.png")));
+        JsonObject base = JsonParser.parseString(Files.readString(out(dir, "models/item/totem_base.json"))).getAsJsonObject();
+        assertEquals("item/golden_sword", base.getAsJsonObject("textures").get("layer1").getAsString());
+        JsonObject totem = JsonParser.parseString(Files.readString(out(dir, "models/item/totem_of_undying.json"))).getAsJsonObject();
+        assertEquals("item/totem_base", totem.get("parent").getAsString());
+    }
 }

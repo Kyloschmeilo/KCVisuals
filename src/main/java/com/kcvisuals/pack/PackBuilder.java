@@ -42,8 +42,9 @@ public final class PackBuilder {
     public static final int PACK_FORMAT = 75;
     public static final String DESCRIPTION = "KC Visuals Custom";
 
-    /** Characters Minecraft accepts in an identifier path; anything else would be rejected when loading. */
-    private static final Pattern VALID_PATH = Pattern.compile("[a-z0-9/._-]+");
+    /** Characters Minecraft accepts in a namespace and identifier path; anything else would be rejected when loading. */
+    private static final Pattern VALID_OUTPUT = Pattern.compile("assets/[a-z0-9_.-]+/[a-z0-9/._-]+");
+    private static final Pattern MODEL_JSON = Pattern.compile("assets/[^/]+/models/.+\\.json");
 
     private PackBuilder() {}
 
@@ -73,7 +74,8 @@ public final class PackBuilder {
         void write(Path target, byte[] data) throws IOException;
     }
 
-    private record Planned(String packId, String rawEntry, PackPath path) {}
+    /** {@code outPath} is the full path in the generated pack, e.g. {@code assets/minecraft/textures/item/x.png}. */
+    private record Planned(String packId, String rawEntry, String outPath, boolean legacy) {}
 
     public static final String STAGING_DIR = ".kc-staging";
     public static final String TRASH_DIR = ".kc-old";
@@ -96,9 +98,8 @@ public final class PackBuilder {
             recoverInterruptedSwap(outDir.resolve("assets"), trash);
             deleteRecursively(staging);
             Map<String, Planned> plan = plan(sel, index, reg, opener, open, missing);
-            Path mcAssets = staging.resolve(PackPath.MC_ASSETS);
             for (Planned p : plan.values()) {
-                if (copy(open.get(p.packId()), p, mcAssets.resolve(p.path().modern()), writer, skipped)) {
+                if (copy(open.get(p.packId()), p, staging.resolve(p.outPath()), writer, skipped)) {
                     written++;
                 }
             }
@@ -134,9 +135,16 @@ public final class PackBuilder {
         }
     }
 
+    /**
+     * Explicit category files first (registry order, later category wins), then each category's dependency closure
+     * from the same pack ({@link ModelClosure}). A closure file never replaces an explicitly selected file; among
+     * closure files the first category in registry order wins.
+     */
     private static Map<String, Planned> plan(Selection sel, PackIndex index, CategoryRegistry reg,
             PackScanner.PackOpener opener, Map<String, PackSource> open, List<String> missing) {
-        Map<String, Planned> plan = new LinkedHashMap<>();
+        Map<String, Planned> explicit = new LinkedHashMap<>();
+        Map<String, Planned> closure = new LinkedHashMap<>();
+        Map<String, Map<String, String>> outputIndexes = new HashMap<>();
         for (Category cat : reg.all()) {
             String packId = sel.packFor(cat.id());
             if (packId == null) {
@@ -149,20 +157,39 @@ public final class PackBuilder {
             Map<String, Planned> forCategory = new LinkedHashMap<>();
             for (String entry : new TreeSet<>(src.entries())) {
                 PackPath path = PackPath.of(entry);
-                if (path == null || !path.in(cat) || !VALID_PATH.matcher(path.modern()).matches()) {
+                if (path == null || !path.in(cat)) {
                     continue;
                 }
-                Planned prev = forCategory.get(path.modern());
-                if (prev != null && !prev.path().isLegacy() && path.isLegacy()) {
+                String out = PackPath.MC_ASSETS + path.modern();
+                if (!VALID_OUTPUT.matcher(out).matches()) {
                     continue;
                 }
-                forCategory.put(path.modern(), new Planned(packId, entry, path));
+                Planned prev = forCategory.get(out);
+                if (prev != null && !prev.legacy() && path.isLegacy()) {
+                    continue;
+                }
+                forCategory.put(out, new Planned(packId, entry, out, path.isLegacy()));
             }
             for (Map.Entry<String, Planned> e : forCategory.entrySet()) {
-                plan.remove(e.getKey());
-                plan.put(e.getKey(), e.getValue());
+                explicit.remove(e.getKey());
+                explicit.put(e.getKey(), e.getValue());
+            }
+            Map<String, String> outIndex =
+                    outputIndexes.computeIfAbsent(packId, id -> ModelClosure.outputIndex(src.entries()));
+            for (Map.Entry<String, String> dep : ModelClosure.closure(src, outIndex, forCategory.keySet()).entrySet()) {
+                if (VALID_OUTPUT.matcher(dep.getKey()).matches()) {
+                    closure.putIfAbsent(dep.getKey(),
+                            new Planned(packId, dep.getValue(), dep.getKey(), PackPath.isLegacyEntry(dep.getValue())));
+                }
             }
         }
+        Map<String, Planned> plan = new LinkedHashMap<>();
+        closure.forEach((out, p) -> {
+            if (!explicit.containsKey(out)) {
+                plan.put(out, p);
+            }
+        });
+        plan.putAll(explicit);
         return plan;
     }
 
@@ -281,7 +308,7 @@ public final class PackBuilder {
             skipped.add(p.packId() + ":" + p.rawEntry());
             return false;
         }
-        if (p.path().modern().startsWith("models/") && p.path().modern().endsWith(".json")) {
+        if (MODEL_JSON.matcher(p.outPath()).matches()) {
             data = rewriteModel(data);
             if (data == null) {
                 LOG.log(System.Logger.Level.WARNING, "Skipping unparseable model " + p.rawEntry() + " in " + p.packId());
@@ -326,9 +353,9 @@ public final class PackBuilder {
         JsonElement parent = root.get("parent");
         if (parent != null && parent.isJsonPrimitive() && parent.getAsJsonPrimitive().isString()) {
             String old = parent.getAsString();
-            String lower = old.toLowerCase(Locale.ROOT);
-            if (!lower.equals(old)) {
-                root.addProperty("parent", lower);
+            String updated = rewriteRef(old, "models/", ".json");
+            if (!updated.equals(old)) {
+                root.addProperty("parent", updated);
                 changed = true;
             }
         }
@@ -336,18 +363,26 @@ public final class PackBuilder {
     }
 
     static String rewriteTextureRef(String ref) {
+        return rewriteRef(ref, "textures/", ".png");
+    }
+
+    /**
+     * Lowercases a resource id (output files are lowercase) and, in the minecraft namespace, maps legacy names the same
+     * way {@link LegacyPaths} maps the files, e.g. {@code items/gold_sword} to {@code item/golden_sword}.
+     */
+    static String rewriteRef(String ref, String dir, String ext) {
         if (ref.startsWith("#")) {
             return ref;
         }
         int colon = ref.indexOf(':');
-        String ns = colon < 0 ? null : ref.substring(0, colon);
-        if (ns != null && !ns.equalsIgnoreCase("minecraft")) {
-            return ref;
-        }
+        String ns = colon < 0 ? null : ref.substring(0, colon).toLowerCase(Locale.ROOT);
         String path = ref.substring(colon + 1).toLowerCase(Locale.ROOT);
-        String mapped = LegacyPaths.normalise("textures/" + path + ".png");
-        if (mapped.startsWith("textures/") && mapped.endsWith(".png")) {
-            path = mapped.substring("textures/".length(), mapped.length() - ".png".length());
+        if (ns != null && !ns.equals("minecraft")) {
+            return ns + ":" + path;
+        }
+        String mapped = LegacyPaths.normalise(dir + path + ext);
+        if (mapped.startsWith(dir) && mapped.endsWith(ext)) {
+            path = mapped.substring(dir.length(), mapped.length() - ext.length());
         }
         return ns == null ? path : "minecraft:" + path;
     }
