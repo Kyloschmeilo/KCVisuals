@@ -1,0 +1,289 @@
+{
+  "categories": [
+    {
+      "id": "swords", "group": "Weapons", "displayName": "Swords",
+      "previewPath": "textures/item/diamond_sword.png",
+      "paths": [
+        "textures/item/wooden_sword*", "textures/item/stone_sword*", "textures/item/iron_sword*", "textures/item/golden_sword*",
+        "textures/item/diamond_sword*", "textures/item/netherite_sword*", "textures/item/copper_sword*",
+        "models/item/wooden_sword*", "models/item/stone_sword*", "models/item/iron_sword*", "models/item/golden_sword*",
+        "models/item/diamond_sword*", "models/item/netherite_sword*", "models/item/copper_sword*",
+        "items/wooden_sword*", "items/stone_sword*", "items/iron_sword*", "items/golden_sword*",
+        "items/diamond_sword*", "items/netherite_sword*", "items/copper_sword*"
+      ]
+    },
+    {
+      "id": "axes", "group": "Weapons", "displayName": "Axes",
+      "previewPath": "textures/item/netherite_axe.png",
+      "paths": [
+        "textures/item/wooden_axe*", "textures/item/stone_axe*", "textures/item/iron_axe*", "textures/item/golden_axe*",
+        "textures/item/diamond_axe*", "textures/item/netherite_axe*", "textures/item/copper_axe*",
+        "models/item/wooden_axe*", "models/item/stone_axe*", "models/item/iron_axe*", "models/item/golden_axe*",
+        "models/item/diamond_axe*", "models/item/netherite_axe*", "models/item/copper_axe*",
+        "items/wooden_axe*", "items/stone_axe*", "items/iron_axe*", "items/golden_axe*",
+        "items/diamond_axe*", "items/netherite_axe*", "items/copper_axe*"
+      ]
+    },
+    {
+      "id": "mace", "group": "Weapons", "displayName": "Mace",
+      "previewPath": "textures/item/mace.png",
+      "paths": ["textures/item/mace*", "models/item/mace*", "items/mace*", "textures/item/heavy_core*", "models/item/heavy_core*", "items/heavy_core*"]
+    },
+    {
+      "id": "bow", "group": "Weapons", "displayName": "Bow",
+      "previewPath": "textures/item/bow.png",
+      "paths": [
+        "textures/item/bow.png*", "textures/item/bow_pulling_*", "textures/item/bow_standby*",
+        "models/item/bow.json", "models/item/bow_pulling_*", "models/item/bow_standby*",
+        "items/bow.json"
+      ]
+    },
+    {
+      "id": "crossbow", "group": "Weapons", "displayName": "Crossbow",
+      "previewPath": "textures/item/crossbow_standby.png",
+      "paths": ["textures/item/crossbow*", "models/item/crossbow*", "items/crossbow*"]
+    },
+    {
+      "id": "trident", "group": "Weapons", "displayName": "Trident",
+      "previewPath": "textures/item/trident.png",
+      "paths": ["textures/item/trident*", "models/item/trident*", "items/trident*", "textures/entity/trident*", "textures/entity/trident/*"]
+    },
+    {
+      "id": "arrows", "group": "Weapons", "displayName": "Arrows",
+      "previewPath": "textures/item/arrow.png",
+      "paths": [
+        "textures/item/arrow*", "textures/item/tipped_arrow*", "textures/item/spectral_arrow*",
+        "models/item/arrow*", "models/item/tipped_arrow*", "models/item/spectral_arrow*",
+        "items/arrow*", "items/tipped_arrow*", "items/spectral_arrow*",
+        "textures/entity/projectiles/arrow*", "textures/entity/projectiles/tipped_arrow*", "textures/entity/projectiles/spectral_arrow*"
+      ]
+    },
+    {
+      "id": "armor_netherite", "group": "Armor", "displayName": "Netherite armor",
+      "previewPath": "textures/item/netherite_chestplate.png",
+      "paths": [
+        "textures/item/netherite_helmet*", "textures/item/netherite_chestplate*", "textures/item/netherite_leggings*", "textures/item/netherite_boots*",
+        "models/item/netherite_helmet*", "models/item/netherite_chestplate*", "models/item/netherite_leggings*", "models/item/netherite_boots*",
+        "items/netherite_helmet*", "items/netherite_chestplate*", "items/netherite_leggings*", "items/netherite_boots*",
+        "textures/entity/equipment/humanoid/netherite.png*", "textures/entity/equipment/humanoid_leggings/netherite.png*",
+        "textures/models/armor/netherite_layer_*", "equipment/netherite.json"
+      ]
+    },
+    {
+      "id": "armor_diamond", "group": "Armor", "displayName": "Diamond armor",
+      "previewPath": "textures/item/diamond_chestplate.png",
+      "paths": [
+        "textures/item/diamond_helmet*", "textures/item/diamond_chestplate*", "textures/item/diamond_leggings*", "textures/item/diamond_boots*",
+        "models/item/diamond_helmet*", "models/item/diamond_chestplate*", "models/item/diamond_leggings*", "models/item/diamond_boots*",
+        "items/diamond_helmet*", "items/diamond_chestplate*", "items/diamond_leggings*", "items/diamond_boots*",
+        "textures/entity/equipment/humanoid/diamond.png*", "textures/entity/equipment/humanoid_leggings/diamond.png*",
+        "textures/models/armor/diamond_layer_*", "equipment/diamond.json"
+      ]
+    },
+    {
+      "id": "armor_layers", "group": "Armor", "displayName": "Other armor and glint",
+      "previewPath": "textures/item/iron_chestplate.png",
+      "paths": [
+        "textures/item/iron_helmet*", "textures/item/iron_chestplate*", "textures/item/iron_leggings*", "textures/item/iron_boots*",
+        "textures/item/golden_helmet*", "textures/item/golden_chestplate*", "textures/item/golden_leggings*", "textures/item/golden_boots*",
+        "textures/item/chainmail_helmet*", "textures/item/chainmail_chestplate*", "textures/item/chainmail_leggings*", "textures/item/chainmail_boots*",
+        "textures/item/leather_helmet*", "textures/item/leather_chestplate*", "textures/item/leather_leggings*", "textures/item/leather_boots*",
+        "textures/item/turtle_helmet*", "textures/item/copper_helmet*", "textures/item/copper_chestplate*", "textures/item/copper_leggings*", "textures/item/copper_boots*",
+        "models/item/iron_helmet*", "models/item/iron_chestplate*", "models/item/iron_leggings*", "models/item/iron_boots*",
+        "models/item/golden_helmet*", "models/item/golden_chestplate*", "models/item/golden_leggings*", "models/item/golden_boots*",
+        "models/item/chainmail_helmet*", "models/item/chainmail_chestplate*", "models/item/chainmail_leggings*", "models/item/chainmail_boots*",
+        "models/item/leather_helmet*", "models/item/leather_chestplate*", "models/item/leather_leggings*", "models/item/leather_boots*",
+        "models/item/turtle_helmet*", "models/item/copper_helmet*", "models/item/copper_chestplate*", "models/item/copper_leggings*", "models/item/copper_boots*",
+        "items/iron_helmet*", "items/iron_chestplate*", "items/iron_leggings*", "items/iron_boots*",
+        "items/golden_helmet*", "items/golden_chestplate*", "items/golden_leggings*", "items/golden_boots*",
+        "items/chainmail_helmet*", "items/chainmail_chestplate*", "items/chainmail_leggings*", "items/chainmail_boots*",
+        "items/leather_helmet*", "items/leather_chestplate*", "items/leather_leggings*", "items/leather_boots*",
+        "items/turtle_helmet*", "items/copper_helmet*", "items/copper_chestplate*", "items/copper_leggings*", "items/copper_boots*",
+        "textures/entity/equipment/humanoid/iron.png*", "textures/entity/equipment/humanoid/gold.png*", "textures/entity/equipment/humanoid/chainmail.png*",
+        "textures/entity/equipment/humanoid/leather*", "textures/entity/equipment/humanoid/turtle_scute.png*", "textures/entity/equipment/humanoid/copper.png*",
+        "textures/entity/equipment/humanoid_leggings/iron.png*", "textures/entity/equipment/humanoid_leggings/gold.png*", "textures/entity/equipment/humanoid_leggings/chainmail.png*",
+        "textures/entity/equipment/humanoid_leggings/leather*", "textures/entity/equipment/humanoid_leggings/copper.png*",
+        "textures/models/armor/iron_layer_*", "textures/models/armor/gold_layer_*", "textures/models/armor/chainmail_layer_*",
+        "textures/models/armor/leather_layer_*", "textures/models/armor/turtle_layer_*", "textures/models/armor/copper_layer_*",
+        "equipment/iron.json", "equipment/gold.json", "equipment/chainmail.json", "equipment/leather.json", "equipment/turtle_scute.json", "equipment/copper.json",
+        "textures/misc/enchanted_glint_armor.png*"
+      ]
+    },
+    {
+      "id": "elytra", "group": "Armor", "displayName": "Elytra",
+      "previewPath": "textures/item/elytra.png",
+      "paths": [
+        "textures/item/elytra*", "models/item/elytra*", "items/elytra*",
+        "textures/entity/equipment/wings/*", "textures/entity/elytra.png*", "equipment/elytra.json"
+      ]
+    },
+    {
+      "id": "shield", "group": "Armor", "displayName": "Shield",
+      "previewPath": "textures/item/shield.png",
+      "paths": [
+        "textures/item/shield*", "models/item/shield*", "items/shield*",
+        "textures/entity/shield*", "textures/entity/shield/*"
+      ]
+    },
+    {
+      "id": "end_crystal", "group": "Crystal PvP", "displayName": "End crystal",
+      "previewPath": "textures/item/end_crystal.png",
+      "paths": [
+        "textures/entity/end_crystal/*", "textures/entity/endercrystal/*",
+        "textures/item/end_crystal*", "models/item/end_crystal*", "items/end_crystal*"
+      ]
+    },
+    {
+      "id": "obsidian", "group": "Crystal PvP", "displayName": "Obsidian",
+      "previewPath": "textures/block/obsidian.png",
+      "paths": [
+        "textures/block/obsidian.png*", "textures/block/crying_obsidian.png*",
+        "models/item/obsidian*", "models/item/crying_obsidian*", "items/obsidian*", "items/crying_obsidian*",
+        "models/block/obsidian*", "models/block/crying_obsidian*"
+      ]
+    },
+    {
+      "id": "respawn_anchor", "group": "Crystal PvP", "displayName": "Respawn anchor",
+      "previewPath": "textures/block/respawn_anchor_top.png",
+      "paths": [
+        "textures/block/respawn_anchor_*", "models/block/respawn_anchor*", "models/item/respawn_anchor*", "items/respawn_anchor*"
+      ]
+    },
+    {
+      "id": "glowstone", "group": "Crystal PvP", "displayName": "Glowstone",
+      "previewPath": "textures/block/glowstone.png",
+      "paths": [
+        "textures/block/glowstone.png*", "textures/item/glowstone_dust*",
+        "models/item/glowstone*", "items/glowstone*", "models/block/glowstone*"
+      ]
+    },
+    {
+      "id": "totem", "group": "Consumables", "displayName": "Totem of Undying",
+      "previewPath": "textures/item/totem_of_undying.png",
+      "paths": [
+        "textures/item/totem_of_undying*", "models/item/totem_of_undying*", "items/totem_of_undying*",
+        "particles/totem_of_undying.json"
+      ]
+    },
+    {
+      "id": "ender_pearl", "group": "Consumables", "displayName": "Ender pearl",
+      "previewPath": "textures/item/ender_pearl.png",
+      "paths": ["textures/item/ender_pearl*", "models/item/ender_pearl*", "items/ender_pearl*"]
+    },
+    {
+      "id": "golden_apple", "group": "Consumables", "displayName": "Golden apple",
+      "previewPath": "textures/item/golden_apple.png",
+      "paths": [
+        "textures/item/golden_apple*", "models/item/golden_apple*", "items/golden_apple*",
+        "textures/item/enchanted_golden_apple*", "models/item/enchanted_golden_apple*", "items/enchanted_golden_apple*"
+      ]
+    },
+    {
+      "id": "wind_charge", "group": "Consumables", "displayName": "Wind charge",
+      "previewPath": "textures/item/wind_charge.png",
+      "paths": [
+        "textures/item/wind_charge*", "models/item/wind_charge*", "items/wind_charge*",
+        "textures/entity/projectiles/wind_charge*", "textures/particle/gust*", "textures/particle/small_gust*",
+        "particles/gust*", "particles/small_gust*"
+      ]
+    },
+    {
+      "id": "potions", "group": "Consumables", "displayName": "Potions",
+      "previewPath": "textures/item/splash_potion.png",
+      "paths": [
+        "textures/item/potion*", "textures/item/splash_potion*", "textures/item/lingering_potion*", "textures/item/glass_bottle*",
+        "models/item/potion*", "models/item/splash_potion*", "models/item/lingering_potion*", "models/item/glass_bottle*",
+        "items/potion*", "items/splash_potion*", "items/lingering_potion*", "items/glass_bottle*"
+      ]
+    },
+    {
+      "id": "splash_particles", "group": "Particles", "displayName": "Splash and potion particles",
+      "previewPath": "textures/particle/splash_0.png",
+      "paths": [
+        "textures/particle/splash_*", "textures/particle/effect_*", "textures/particle/spell_*", "textures/particle/bubble*",
+        "particles/splash.json", "particles/effect.json", "particles/instant_effect.json", "particles/entity_effect.json",
+        "particles/bubble*"
+      ]
+    },
+    {
+      "id": "cobweb", "group": "World", "displayName": "Cobweb",
+      "previewPath": "textures/block/cobweb.png",
+      "paths": [
+        "textures/block/cobweb.png*", "textures/item/cobweb*", "models/item/cobweb*", "items/cobweb*", "models/block/cobweb*"
+      ]
+    },
+    {
+      "id": "water_lava", "group": "World", "displayName": "Water and lava",
+      "previewPath": "textures/block/water_still.png",
+      "paths": [
+        "textures/block/water_*", "textures/block/lava_*",
+        "textures/item/water_bucket*", "textures/item/lava_bucket*",
+        "models/item/water_bucket*", "models/item/lava_bucket*", "items/water_bucket*", "items/lava_bucket*",
+        "textures/misc/underwater.png*"
+      ]
+    },
+    {
+      "id": "fire", "group": "World", "displayName": "Fire",
+      "previewPath": "textures/block/fire_0.png",
+      "paths": [
+        "textures/block/fire_0.png*", "textures/block/fire_1.png*", "textures/block/fire_2.png*",
+        "textures/block/soul_fire_0.png*", "textures/block/soul_fire_1.png*", "textures/block/soul_fire_2.png*",
+        "models/block/fire_floor*", "models/block/fire_side*", "models/block/fire_up*",
+        "models/block/soul_fire_floor*", "models/block/soul_fire_side*", "models/block/soul_fire_up*",
+        "textures/item/fire_charge*", "models/item/fire_charge*", "items/fire_charge*"
+      ]
+    },
+    {
+      "id": "explosion_particles", "group": "Particles", "displayName": "Explosion particles",
+      "previewPath": "textures/particle/explosion_0.png",
+      "paths": [
+        "textures/particle/explosion*", "textures/particle/big_smoke_*", "textures/particle/generic_*",
+        "particles/explosion*", "particles/large_smoke.json", "particles/smoke.json", "particles/poof.json"
+      ]
+    },
+    {
+      "id": "crit_particles", "group": "Particles", "displayName": "Crit and hit particles",
+      "previewPath": "textures/particle/critical_hit.png",
+      "paths": [
+        "textures/particle/critical_hit*", "textures/particle/damage*", "textures/particle/sweep_*",
+        "particles/crit.json", "particles/enchanted_hit.json", "particles/damage_indicator.json", "particles/sweep_attack.json"
+      ]
+    },
+    {
+      "id": "hotbar", "group": "Interface", "displayName": "Hotbar",
+      "previewPath": "textures/gui/sprites/hud/hotbar.png",
+      "paths": [
+        "textures/gui/sprites/hud/hotbar*", "textures/gui/widgets.png*"
+      ]
+    },
+    {
+      "id": "hud_icons", "group": "Interface", "displayName": "HUD icons",
+      "previewPath": "textures/gui/sprites/hud/heart/full.png",
+      "paths": [
+        "textures/gui/sprites/hud/heart/*", "textures/gui/sprites/hud/food_*", "textures/gui/sprites/hud/armor_*",
+        "textures/gui/sprites/hud/air*", "textures/gui/sprites/hud/experience_bar*", "textures/gui/sprites/hud/effect_*",
+        "textures/gui/sprites/hud/jump_bar*", "textures/gui/sprites/hud/locator_bar*",
+        "textures/gui/icons.png*", "textures/mob_effect/*"
+      ]
+    },
+    {
+      "id": "crosshair", "group": "Interface", "displayName": "Crosshair",
+      "previewPath": "textures/gui/sprites/hud/crosshair.png",
+      "paths": ["textures/gui/sprites/hud/crosshair*"]
+    },
+    {
+      "id": "inventory_gui", "group": "Interface", "displayName": "Inventory and containers",
+      "previewPath": "textures/gui/container/inventory.png",
+      "paths": [
+        "textures/gui/container/*", "textures/gui/sprites/container/*", "textures/gui/sprites/recipe_book/*"
+      ]
+    },
+    {
+      "id": "sky", "group": "World", "displayName": "Sky, sun and clouds",
+      "previewPath": "textures/environment/celestial/sun.png",
+      "paths": [
+        "textures/environment/*", "optifine/sky/*", "mcpatcher/sky/*"
+      ]
+    }
+  ]
+}
