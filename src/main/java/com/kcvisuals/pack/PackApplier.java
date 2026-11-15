@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.resource.ResourcePackManager;
@@ -20,6 +21,8 @@ public final class PackApplier {
         t.setDaemon(true);
         return t;
     });
+
+    static final long RELOAD_TIMEOUT_SECONDS = 60;
 
     private static volatile CategoryRegistry registry;
 
@@ -54,11 +57,16 @@ public final class PackApplier {
                     CategoryRegistry reg = registry();
                     PackIndex index = PackScanner.scan(paths.packs(), reg, paths.index());
                     PackBuilder.BuildReport report = PackBuilder.build(selection, index, reg, paths.generatedPack());
-                    KCVisuals.LOGGER.info("Built {}: {} files, missing packs {}",
-                            KCPaths.CUSTOM_PACK_NAME, report.filesWritten(), report.missingPacks());
+                    KCVisuals.LOGGER.info("Built {}: {} files, missing packs {}, skipped entries {}", KCPaths.CUSTOM_PACK_NAME,
+                            report.filesWritten(), report.missingPacks(), report.skippedEntries());
                     return report;
                 }, BUILD_EXECUTOR)
-                .thenComposeAsync(report -> enableOnTopAndReload(client).thenApply(v -> report), client)
+                .thenComposeAsync(report -> enableOnTopAndReload(client)
+                        // Bounded so a reload future that never completes cannot wedge the ApplyQueue. copy() keeps the
+                        // timeout from completing the client's own reload future.
+                        .copy()
+                        .orTimeout(RELOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                        .thenApply(v -> report), client)
                 .whenComplete((r, e) -> {
                     if (e != null) {
                         KCVisuals.LOGGER.error("Applying {} failed", KCPaths.CUSTOM_PACK_NAME, e);

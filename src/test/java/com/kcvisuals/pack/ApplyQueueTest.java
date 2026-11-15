@@ -77,4 +77,20 @@ class ApplyQueueTest {
         assertTrue(q.submit("bad").isCompletedExceptionally());
         assertEquals("good", q.submit("good").join());
     }
+
+    @Test
+    void timedOutJobFailsAndQueueContinues() {
+        java.util.List<String> started = new java.util.ArrayList<>();
+        ApplyQueue<String, String> q = new ApplyQueue<>(s -> {
+            started.add(s);
+            // Never completes by itself, like a reload future that is never signalled; PackApplier bounds it.
+            return new CompletableFuture<String>().orTimeout(50, java.util.concurrent.TimeUnit.MILLISECONDS);
+        });
+        CompletableFuture<String> a = q.submit("a");
+        CompletableFuture<String> b = q.submit("b");
+        java.util.concurrent.CompletionException ex = assertThrows(java.util.concurrent.CompletionException.class, a::join);
+        assertInstanceOf(java.util.concurrent.TimeoutException.class, ex.getCause());
+        assertThrows(java.util.concurrent.CompletionException.class, b::join);
+        assertEquals(List.of("a", "b"), started, "queue must move on after a timeout");
+    }
 }

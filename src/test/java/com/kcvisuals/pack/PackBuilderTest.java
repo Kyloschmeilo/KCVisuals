@@ -206,30 +206,50 @@ class PackBuilderTest {
         assertEquals("dir", Files.readString(out(dir, TOTEM)));
     }
 
-    /** Wraps a source so that opening any entry fails, as a locked or corrupt file would mid-build. */
-    static PackSource failingOnOpen(PackSource real) {
+    /** Wraps a source so that opening the given entry fails, as a corrupt zip entry would. */
+    static PackSource failingOn(PackSource real, String badEntry) {
         return new PackSource() {
             public String id() { return real.id(); }
             public String displayName() { return real.displayName(); }
             public Set<String> entries() { return real.entries(); }
-            public InputStream open(String entryPath) throws IOException { throw new IOException("simulated read failure"); }
+            public InputStream open(String entryPath) throws IOException {
+                if (entryPath.equals(badEntry)) {
+                    throw new java.util.zip.ZipException("invalid entry CRC (simulated)");
+                }
+                return real.open(entryPath);
+            }
             public void close() throws IOException { real.close(); }
         };
     }
 
+    static final PackBuilder.EntryWriter FAILING_WRITER = (target, data) -> {
+        throw new IOException("No space left on device (simulated)");
+    };
+
     @Test
-    void buildIntoStagingKeepsOldPackOnFailure(@TempDir Path dir) throws IOException {
+    void corruptEntryIsSkippedOthersCopied(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "A.zip", MC + TOTEM, MC + SWORD, MC + "textures/item/iron_sword.png");
+        PackIndex idx = PackScanner.scan(dir.resolve("packs"), reg);
+        PackScanner.PackOpener opener = p -> failingOn(PackSource.open(p), MC + SWORD);
+        PackBuilder.BuildReport report = PackBuilder.build(Selection.of(Map.of("totem", "A.zip", "swords", "A.zip")),
+                idx, reg, dir.resolve("out"), opener, PackBuilder.EntryWriter.FILES);
+        assertEquals(2, report.filesWritten());
+        assertEquals(List.of("A.zip:" + MC + SWORD), report.skippedEntries());
+        assertTrue(Files.exists(out(dir, TOTEM)));
+        assertTrue(Files.exists(out(dir, "textures/item/iron_sword.png")));
+        assertFalse(Files.exists(out(dir, SWORD)));
+    }
+
+    @Test
+    void stagingWriteFailureKeepsOldPack(@TempDir Path dir) throws IOException {
         zip(dir.resolve("packs"), "A.zip", MC + TOTEM);
         zip(dir.resolve("packs"), "B.zip", MC + SWORD);
         build(dir, Selection.of(Map.of("totem", "A.zip")));
         assertEquals(MC + TOTEM, Files.readString(out(dir, TOTEM)));
 
         PackIndex idx = PackScanner.scan(dir.resolve("packs"), reg);
-        PackScanner.PackOpener failingB = p -> p.getFileName().toString().equals("B.zip")
-                ? failingOnOpen(PackSource.open(p)) : PackSource.open(p);
-        Selection next = Selection.of(Map.of("swords", "B.zip"));
-        assertThrows(java.io.UncheckedIOException.class,
-                () -> PackBuilder.build(next, idx, reg, dir.resolve("out"), failingB));
+        assertThrows(java.io.UncheckedIOException.class, () -> PackBuilder.build(Selection.of(Map.of("swords", "B.zip")),
+                idx, reg, dir.resolve("out"), PackSource::open, FAILING_WRITER));
 
         assertEquals(MC + TOTEM, Files.readString(out(dir, TOTEM)), "previous pack must survive a failed build");
         assertFalse(Files.exists(out(dir, SWORD)));
@@ -237,6 +257,35 @@ class PackBuilderTest {
         assertFalse(Files.exists(dir.resolve(PackBuilder.STAGING_DIR)), "staging must be cleaned up");
     }
 
+    @Test
+    void restoresKcOldWhenAssetsMissing(@TempDir Path dir) throws IOException {
+        // Simulates a crash between "rename live assets aside" and "move staged assets in".
+        Path kcOld = dir.resolve(PackBuilder.TRASH_DIR).resolve("minecraft/" + TOTEM);
+        Files.createDirectories(kcOld.getParent());
+        Files.writeString(kcOld, "old");
+        Files.createDirectories(dir.resolve("out"));
+        zip(dir.resolve("packs"), "B.zip", MC + SWORD);
+        PackIndex idx = PackScanner.scan(dir.resolve("packs"), reg);
+
+        assertThrows(java.io.UncheckedIOException.class, () -> PackBuilder.build(Selection.of(Map.of("swords", "B.zip")),
+                idx, reg, dir.resolve("out"), PackSource::open, FAILING_WRITER));
+
+        assertEquals("old", Files.readString(out(dir, TOTEM)), ".kc-old must be restored, not deleted");
+        assertFalse(Files.exists(dir.resolve(PackBuilder.TRASH_DIR)));
+    }
+
+    @Test
+    void staleKcOldNextToLiveAssetsIsDiscarded(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "A.zip", MC + TOTEM);
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        Path stale = dir.resolve(PackBuilder.TRASH_DIR).resolve("minecraft/textures/item/stale.png");
+        Files.createDirectories(stale.getParent());
+        Files.writeString(stale, "stale");
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        assertTrue(Files.exists(out(dir, TOTEM)));
+        assertFalse(Files.exists(out(dir, "textures/item/stale.png")));
+        assertFalse(Files.exists(dir.resolve(PackBuilder.TRASH_DIR)));
+    }
     @Test
     void successfulBuildLeavesNoStagingBehind(@TempDir Path dir) throws IOException {
         zip(dir.resolve("packs"), "A.zip", MC + TOTEM);

@@ -30,9 +30,10 @@ import java.util.regex.Pattern;
  * produce the same output path, the one later in {@code categories.json} wins. Inside one category a modern entry
  * beats a legacy entry mapping to the same path; otherwise entries are applied in sorted raw-name order.
  *
- * <p>Files are written to {@code <outDir>/../.kc-staging} first and swapped in at the end. A read or write error
- * throws {@link java.io.UncheckedIOException} and leaves the previous {@code assets/} untouched; packs that cannot be
- * opened at all are reported in {@link BuildReport#missingPacks()} instead.
+ * <p>Files (and pack.mcmeta) are written to {@code <outDir>/../.kc-staging} first and swapped in at the end. An
+ * unreadable source entry is skipped and listed in {@link BuildReport#skippedEntries()}; a pack that cannot be opened
+ * at all is listed in {@link BuildReport#missingPacks()}. Write or swap errors throw
+ * {@link java.io.UncheckedIOException} and leave the previous pack in place.
  */
 public final class PackBuilder {
     private static final System.Logger LOG = System.getLogger("kcvisuals");
@@ -46,10 +47,30 @@ public final class PackBuilder {
 
     private PackBuilder() {}
 
-    public record BuildReport(int filesWritten, List<String> missingPacks) {
+    /**
+     * @param skippedEntries {@code packId:entry} of source entries that could not be read (corrupt zip entry, locked
+     *     file) and were left out; the rest of the pack is still used
+     */
+    public record BuildReport(int filesWritten, List<String> missingPacks, List<String> skippedEntries) {
         public BuildReport {
             missingPacks = List.copyOf(missingPacks);
+            skippedEntries = List.copyOf(skippedEntries);
         }
+
+        public BuildReport(int filesWritten, List<String> missingPacks) {
+            this(filesWritten, missingPacks, List.of());
+        }
+    }
+
+    /** Writes one staged file; injectable so tests can simulate a failing disk. */
+    @FunctionalInterface
+    interface EntryWriter {
+        EntryWriter FILES = (target, data) -> {
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+        };
+
+        void write(Path target, byte[] data) throws IOException;
     }
 
     private record Planned(String packId, String rawEntry, PackPath path) {}
@@ -58,31 +79,34 @@ public final class PackBuilder {
     public static final String TRASH_DIR = ".kc-old";
 
     public static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir) {
-        return build(sel, index, reg, outDir, PackSource::open);
+        return build(sel, index, reg, outDir, PackSource::open, EntryWriter.FILES);
     }
 
-    static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir, PackScanner.PackOpener opener) {
+    static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir, PackScanner.PackOpener opener,
+            EntryWriter writer) {
         Path parent = outDir.toAbsolutePath().getParent();
         Path staging = parent.resolve(STAGING_DIR);
+        Path trash = parent.resolve(TRASH_DIR);
         List<String> missing = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
         Map<String, PackSource> open = new HashMap<>();
         int written = 0;
         try {
+            Files.createDirectories(outDir);
+            recoverInterruptedSwap(outDir.resolve("assets"), trash);
             deleteRecursively(staging);
-            deleteRecursively(parent.resolve(TRASH_DIR));
             Map<String, Planned> plan = plan(sel, index, reg, opener, open, missing);
-            Path stagedAssets = staging.resolve("assets");
             Path mcAssets = staging.resolve(PackPath.MC_ASSETS);
             for (Planned p : plan.values()) {
-                if (copy(open.get(p.packId()), p, mcAssets.resolve(p.path().modern()))) {
+                if (copy(open.get(p.packId()), p, mcAssets.resolve(p.path().modern()), writer, skipped)) {
                     written++;
                 }
             }
             closeAll(open);
-            swapIn(stagedAssets, outDir, parent.resolve(TRASH_DIR));
-            writeMcmeta(outDir);
+            writeMcmeta(staging);
+            swapIn(staging, outDir, trash);
         } catch (IOException e) {
-            throw new UncheckedIOException("Building " + outDir.getFileName() + " failed; previous pack kept", e);
+            throw new UncheckedIOException("Building " + outDir.getFileName() + " failed: " + e.getMessage(), e);
         } finally {
             closeAll(open);
             try {
@@ -91,7 +115,23 @@ public final class PackBuilder {
                 LOG.log(System.Logger.Level.WARNING, "Could not clean " + staging + ": " + e);
             }
         }
-        return new BuildReport(written, missing);
+        return new BuildReport(written, missing, skipped);
+    }
+
+    /**
+     * A crash between "rename live assets aside" and "move staged assets in" leaves only {@code .kc-old}: put it
+     * back. If live assets exist, a leftover {@code .kc-old} is stale and is discarded.
+     */
+    private static void recoverInterruptedSwap(Path assets, Path trash) throws IOException {
+        if (!Files.exists(trash)) {
+            return;
+        }
+        if (Files.exists(assets)) {
+            deleteRecursively(trash);
+        } else {
+            LOG.log(System.Logger.Level.WARNING, "Restoring " + assets + " from interrupted rebuild");
+            Files.move(trash, assets);
+        }
     }
 
     private static Map<String, Planned> plan(Selection sel, PackIndex index, CategoryRegistry reg,
@@ -127,32 +167,56 @@ public final class PackBuilder {
     }
 
     /**
-     * Replaces {@code outDir/assets} with the staged folder. The old folder is first renamed aside (atomic on one
-     * volume); if Windows refuses the rename because a file is locked, it is deleted instead. The staged folder is
-     * moved in, falling back to a copy. The renamed-aside old folder is removed last, best effort.
+     * Replaces {@code outDir/assets} and {@code outDir/pack.mcmeta} with the staged ones. The live folder is renamed
+     * aside first; if that rename fails (e.g. a file is locked on Windows) the build fails and the live pack is left
+     * exactly as it was. If moving the staged folder in fails (move, then copy), the old folder is put back.
      */
-    private static void swapIn(Path stagedAssets, Path outDir, Path trash) throws IOException {
-        Files.createDirectories(outDir);
+    private static void swapIn(Path staging, Path outDir, Path trash) throws IOException {
         Path assets = outDir.resolve("assets");
+        Path stagedAssets = staging.resolve("assets");
         if (Files.exists(assets)) {
             try {
                 Files.move(assets, trash);
             } catch (IOException renameFailed) {
-                LOG.log(System.Logger.Level.WARNING, "Cannot rename old assets aside (" + renameFailed + "), deleting");
-                deleteRecursively(assets);
+                throw new IOException("cannot move the current pack aside (" + renameFailed
+                        + "); the current pack was left unchanged", renameFailed);
             }
         }
         if (Files.exists(stagedAssets)) {
             try {
-                Files.move(stagedAssets, assets);
-            } catch (IOException moveFailed) {
-                copyRecursively(stagedAssets, assets);
+                moveOrCopy(stagedAssets, assets);
+            } catch (IOException installFailed) {
+                try {
+                    deleteRecursively(assets);
+                    if (Files.exists(trash)) {
+                        Files.move(trash, assets);
+                    }
+                } catch (IOException restoreFailed) {
+                    installFailed.addSuppressed(restoreFailed);
+                    throw new IOException("cannot install the new pack and restoring the old one failed; it is kept in "
+                            + trash + " and will be restored on the next build", installFailed);
+                }
+                throw new IOException("cannot install the new pack; the previous pack was restored", installFailed);
             }
+        }
+        try {
+            Files.move(staging.resolve("pack.mcmeta"), outDir.resolve("pack.mcmeta"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.WARNING, "Could not replace pack.mcmeta (keeping the old one): " + e);
         }
         try {
             deleteRecursively(trash);
         } catch (IOException e) {
             LOG.log(System.Logger.Level.WARNING, "Could not delete old assets " + trash + ": " + e);
+        }
+    }
+
+    private static void moveOrCopy(Path from, Path to) throws IOException {
+        try {
+            Files.move(from, to);
+        } catch (IOException moveFailed) {
+            copyRecursively(from, to);
         }
     }
 
@@ -203,13 +267,19 @@ public final class PackBuilder {
         }
     }
 
-    /** Returns false for a skipped (unparseable) model; read or write errors fail the whole build. */
-    private static boolean copy(PackSource src, Planned p, Path target) throws IOException {
+    /**
+     * Returns false if the entry was left out. Read errors of the source (corrupt zip entry, locked file) skip just
+     * that entry and are recorded in {@code skipped}; write errors into staging fail the whole build.
+     */
+    private static boolean copy(PackSource src, Planned p, Path target, EntryWriter writer, List<String> skipped)
+            throws IOException {
         byte[] data;
         try (InputStream in = src.open(p.rawEntry())) {
             data = in.readAllBytes();
-        } catch (IOException e) {
-            throw new IOException("Cannot read " + p.rawEntry() + " from " + p.packId(), e);
+        } catch (IOException | RuntimeException e) {
+            LOG.log(System.Logger.Level.WARNING, "Skipping unreadable " + p.rawEntry() + " in " + p.packId() + ": " + e);
+            skipped.add(p.packId() + ":" + p.rawEntry());
+            return false;
         }
         if (p.path().modern().startsWith("models/") && p.path().modern().endsWith(".json")) {
             data = rewriteModel(data);
@@ -218,8 +288,7 @@ public final class PackBuilder {
                 return false;
             }
         }
-        Files.createDirectories(target.getParent());
-        Files.write(target, data);
+        writer.write(target, data);
         return true;
     }
 
