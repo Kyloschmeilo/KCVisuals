@@ -32,6 +32,7 @@ public class KCVisuals implements ClientModInitializer {
         } catch (IOException e) {
             LOGGER.error("Konnte KC-Visuals-Ordner nicht anlegen", e);
         }
+        com.kcvisuals.pack.StartupApply.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("kcv").executes(ctx -> {
                     openMenu();
