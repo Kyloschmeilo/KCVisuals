@@ -29,6 +29,10 @@ import java.util.regex.Pattern;
  * <p>Overwrite order is deterministic: categories are applied in registry order, so when two selected categories
  * produce the same output path, the one later in {@code categories.json} wins. Inside one category a modern entry
  * beats a legacy entry mapping to the same path; otherwise entries are applied in sorted raw-name order.
+ *
+ * <p>Files are written to {@code <outDir>/../.kc-staging} first and swapped in at the end. A read or write error
+ * throws {@link java.io.UncheckedIOException} and leaves the previous {@code assets/} untouched; packs that cannot be
+ * opened at all are reported in {@link BuildReport#missingPacks()} instead.
  */
 public final class PackBuilder {
     private static final System.Logger LOG = System.getLogger("kcvisuals");
@@ -50,63 +54,117 @@ public final class PackBuilder {
 
     private record Planned(String packId, String rawEntry, PackPath path) {}
 
-    public static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir) {
-        try {
-            Files.createDirectories(outDir);
-            deleteRecursively(outDir.resolve("assets"));
-            writeMcmeta(outDir);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+    public static final String STAGING_DIR = ".kc-staging";
+    public static final String TRASH_DIR = ".kc-old";
 
+    public static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir) {
+        return build(sel, index, reg, outDir, PackSource::open);
+    }
+
+    static BuildReport build(Selection sel, PackIndex index, CategoryRegistry reg, Path outDir, PackScanner.PackOpener opener) {
+        Path parent = outDir.toAbsolutePath().getParent();
+        Path staging = parent.resolve(STAGING_DIR);
         List<String> missing = new ArrayList<>();
         Map<String, PackSource> open = new HashMap<>();
+        int written = 0;
         try {
-            Map<String, Planned> plan = new LinkedHashMap<>();
-            for (Category cat : reg.all()) {
-                String packId = sel.packFor(cat.id());
-                if (packId == null) {
-                    continue;
-                }
-                PackSource src = openPack(packId, index, open, missing);
-                if (src == null) {
-                    continue;
-                }
-                Map<String, Planned> forCategory = new LinkedHashMap<>();
-                for (String entry : new TreeSet<>(src.entries())) {
-                    PackPath path = PackPath.of(entry);
-                    if (path == null || !path.in(cat) || !VALID_PATH.matcher(path.modern()).matches()) {
-                        continue;
-                    }
-                    Planned prev = forCategory.get(path.modern());
-                    if (prev != null && !prev.path().isLegacy() && path.isLegacy()) {
-                        continue;
-                    }
-                    forCategory.put(path.modern(), new Planned(packId, entry, path));
-                }
-                for (Map.Entry<String, Planned> e : forCategory.entrySet()) {
-                    plan.remove(e.getKey());
-                    plan.put(e.getKey(), e.getValue());
-                }
-            }
-
-            Path assets = outDir.resolve(PackPath.MC_ASSETS);
-            int written = 0;
+            deleteRecursively(staging);
+            deleteRecursively(parent.resolve(TRASH_DIR));
+            Map<String, Planned> plan = plan(sel, index, reg, opener, open, missing);
+            Path stagedAssets = staging.resolve("assets");
+            Path mcAssets = staging.resolve(PackPath.MC_ASSETS);
             for (Planned p : plan.values()) {
-                if (copy(open.get(p.packId()), p, assets.resolve(p.path().modern()))) {
+                if (copy(open.get(p.packId()), p, mcAssets.resolve(p.path().modern()))) {
                     written++;
                 }
             }
-            return new BuildReport(written, missing);
+            closeAll(open);
+            swapIn(stagedAssets, outDir, parent.resolve(TRASH_DIR));
+            writeMcmeta(outDir);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Building " + outDir.getFileName() + " failed; previous pack kept", e);
         } finally {
-            for (PackSource src : open.values()) {
-                try {
-                    src.close();
-                } catch (IOException ignored) {
-                    // read-only source; nothing to recover
-                }
+            closeAll(open);
+            try {
+                deleteRecursively(staging);
+            } catch (IOException e) {
+                LOG.log(System.Logger.Level.WARNING, "Could not clean " + staging + ": " + e);
             }
         }
+        return new BuildReport(written, missing);
+    }
+
+    private static Map<String, Planned> plan(Selection sel, PackIndex index, CategoryRegistry reg,
+            PackScanner.PackOpener opener, Map<String, PackSource> open, List<String> missing) {
+        Map<String, Planned> plan = new LinkedHashMap<>();
+        for (Category cat : reg.all()) {
+            String packId = sel.packFor(cat.id());
+            if (packId == null) {
+                continue;
+            }
+            PackSource src = openPack(packId, index, opener, open, missing);
+            if (src == null) {
+                continue;
+            }
+            Map<String, Planned> forCategory = new LinkedHashMap<>();
+            for (String entry : new TreeSet<>(src.entries())) {
+                PackPath path = PackPath.of(entry);
+                if (path == null || !path.in(cat) || !VALID_PATH.matcher(path.modern()).matches()) {
+                    continue;
+                }
+                Planned prev = forCategory.get(path.modern());
+                if (prev != null && !prev.path().isLegacy() && path.isLegacy()) {
+                    continue;
+                }
+                forCategory.put(path.modern(), new Planned(packId, entry, path));
+            }
+            for (Map.Entry<String, Planned> e : forCategory.entrySet()) {
+                plan.remove(e.getKey());
+                plan.put(e.getKey(), e.getValue());
+            }
+        }
+        return plan;
+    }
+
+    /**
+     * Replaces {@code outDir/assets} with the staged folder. The old folder is first renamed aside (atomic on one
+     * volume); if Windows refuses the rename because a file is locked, it is deleted instead. The staged folder is
+     * moved in, falling back to a copy. The renamed-aside old folder is removed last, best effort.
+     */
+    private static void swapIn(Path stagedAssets, Path outDir, Path trash) throws IOException {
+        Files.createDirectories(outDir);
+        Path assets = outDir.resolve("assets");
+        if (Files.exists(assets)) {
+            try {
+                Files.move(assets, trash);
+            } catch (IOException renameFailed) {
+                LOG.log(System.Logger.Level.WARNING, "Cannot rename old assets aside (" + renameFailed + "), deleting");
+                deleteRecursively(assets);
+            }
+        }
+        if (Files.exists(stagedAssets)) {
+            try {
+                Files.move(stagedAssets, assets);
+            } catch (IOException moveFailed) {
+                copyRecursively(stagedAssets, assets);
+            }
+        }
+        try {
+            deleteRecursively(trash);
+        } catch (IOException e) {
+            LOG.log(System.Logger.Level.WARNING, "Could not delete old assets " + trash + ": " + e);
+        }
+    }
+
+    private static void closeAll(Map<String, PackSource> open) {
+        for (PackSource src : open.values()) {
+            try {
+                src.close();
+            } catch (IOException ignored) {
+                // read-only source; nothing to recover
+            }
+        }
+        open.clear();
     }
 
     /** Writes a pack.mcmeta valid for 1.21.11 (formats from 65 on are declared via min_format/max_format). */
@@ -122,7 +180,7 @@ public final class PackBuilder {
         Files.writeString(outDir.resolve("pack.mcmeta"), root.toString(), StandardCharsets.UTF_8);
     }
 
-    private static PackSource openPack(String packId, PackIndex index, Map<String, PackSource> open, List<String> missing) {
+    private static PackSource openPack(String packId, PackIndex index, PackScanner.PackOpener opener, Map<String, PackSource> open, List<String> missing) {
         if (open.containsKey(packId)) {
             return open.get(packId);
         }
@@ -135,7 +193,7 @@ public final class PackBuilder {
             return null;
         }
         try {
-            PackSource src = PackSource.open(info.file());
+            PackSource src = opener.open(info.file());
             open.put(packId, src);
             return src;
         } catch (IOException | RuntimeException e) {
@@ -145,23 +203,24 @@ public final class PackBuilder {
         }
     }
 
-    private static boolean copy(PackSource src, Planned p, Path target) {
+    /** Returns false for a skipped (unparseable) model; read or write errors fail the whole build. */
+    private static boolean copy(PackSource src, Planned p, Path target) throws IOException {
+        byte[] data;
         try (InputStream in = src.open(p.rawEntry())) {
-            byte[] data = in.readAllBytes();
-            if (p.path().modern().startsWith("models/") && p.path().modern().endsWith(".json")) {
-                data = rewriteModel(data);
-                if (data == null) {
-                    LOG.log(System.Logger.Level.WARNING, "Skipping unparseable model " + p.rawEntry() + " in " + p.packId());
-                    return false;
-                }
-            }
-            Files.createDirectories(target.getParent());
-            Files.write(target, data);
-            return true;
-        } catch (IOException | RuntimeException e) {
-            LOG.log(System.Logger.Level.WARNING, "Cannot copy " + p.rawEntry() + " from " + p.packId() + ": " + e);
-            return false;
+            data = in.readAllBytes();
+        } catch (IOException e) {
+            throw new IOException("Cannot read " + p.rawEntry() + " from " + p.packId(), e);
         }
+        if (p.path().modern().startsWith("models/") && p.path().modern().endsWith(".json")) {
+            data = rewriteModel(data);
+            if (data == null) {
+                LOG.log(System.Logger.Level.WARNING, "Skipping unparseable model " + p.rawEntry() + " in " + p.packId());
+                return false;
+            }
+        }
+        Files.createDirectories(target.getParent());
+        Files.write(target, data);
+        return true;
     }
 
     /**
@@ -222,6 +281,19 @@ public final class PackBuilder {
             path = mapped.substring("textures/".length(), mapped.length() - ".png".length());
         }
         return ns == null ? path : "minecraft:" + path;
+    }
+
+    private static void copyRecursively(Path from, Path to) throws IOException {
+        try (java.util.stream.Stream<Path> walk = Files.walk(from)) {
+            for (Path src : (Iterable<Path>) walk::iterator) {
+                Path dst = to.resolve(from.relativize(src).toString());
+                if (Files.isDirectory(src)) {
+                    Files.createDirectories(dst);
+                } else {
+                    Files.copy(src, dst, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
     }
 
     private static void deleteRecursively(Path dir) throws IOException {

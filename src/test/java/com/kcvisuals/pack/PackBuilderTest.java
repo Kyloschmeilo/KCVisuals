@@ -205,4 +205,45 @@ class PackBuilderTest {
         build(dir, Selection.of(Map.of("totem", "DirPack")));
         assertEquals("dir", Files.readString(out(dir, TOTEM)));
     }
+
+    /** Wraps a source so that opening any entry fails, as a locked or corrupt file would mid-build. */
+    static PackSource failingOnOpen(PackSource real) {
+        return new PackSource() {
+            public String id() { return real.id(); }
+            public String displayName() { return real.displayName(); }
+            public Set<String> entries() { return real.entries(); }
+            public InputStream open(String entryPath) throws IOException { throw new IOException("simulated read failure"); }
+            public void close() throws IOException { real.close(); }
+        };
+    }
+
+    @Test
+    void buildIntoStagingKeepsOldPackOnFailure(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "A.zip", MC + TOTEM);
+        zip(dir.resolve("packs"), "B.zip", MC + SWORD);
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        assertEquals(MC + TOTEM, Files.readString(out(dir, TOTEM)));
+
+        PackIndex idx = PackScanner.scan(dir.resolve("packs"), reg);
+        PackScanner.PackOpener failingB = p -> p.getFileName().toString().equals("B.zip")
+                ? failingOnOpen(PackSource.open(p)) : PackSource.open(p);
+        Selection next = Selection.of(Map.of("swords", "B.zip"));
+        assertThrows(java.io.UncheckedIOException.class,
+                () -> PackBuilder.build(next, idx, reg, dir.resolve("out"), failingB));
+
+        assertEquals(MC + TOTEM, Files.readString(out(dir, TOTEM)), "previous pack must survive a failed build");
+        assertFalse(Files.exists(out(dir, SWORD)));
+        assertTrue(Files.isRegularFile(dir.resolve("out/pack.mcmeta")));
+        assertFalse(Files.exists(dir.resolve(PackBuilder.STAGING_DIR)), "staging must be cleaned up");
+    }
+
+    @Test
+    void successfulBuildLeavesNoStagingBehind(@TempDir Path dir) throws IOException {
+        zip(dir.resolve("packs"), "A.zip", MC + TOTEM);
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        build(dir, Selection.of(Map.of("totem", "A.zip")));
+        assertTrue(Files.exists(out(dir, TOTEM)));
+        assertFalse(Files.exists(dir.resolve(PackBuilder.STAGING_DIR)));
+        assertFalse(Files.exists(dir.resolve(PackBuilder.TRASH_DIR)));
+    }
 }
