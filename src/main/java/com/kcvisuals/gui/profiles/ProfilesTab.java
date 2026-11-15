@@ -39,6 +39,7 @@ public class ProfilesTab implements TabPanel {
     private String selected;
     private int builtRevision = -1;
     private long confirmDeleteUntil;
+    private long confirmActivateUntil;
     private String message;
     private int messageColor;
     private long messageUntil;
@@ -81,7 +82,7 @@ public class ProfilesTab implements TabPanel {
         detY = bodyY;
         detW = w - listW - 8;
         detH = bodyH;
-        int aw = Button.widthFor("Aktivieren") + 6;
+        int aw = Math.min(Button.widthFor("Änderungen verwerfen?"), Math.max(Button.widthFor("Aktivieren") + 6, (w - Math.max(130, w * 42 / 100) - 8) / 2 - 12));
         int dw = Button.widthFor("Wirklich löschen?");
         activate.setBounds(detX + detW - 8 - aw, detY + detH - 8 - BAR_H, aw, BAR_H);
         delete.setBounds(activate.x - 4 - dw, activate.y, dw, BAR_H);
@@ -265,15 +266,24 @@ public class ProfilesTab implements TabPanel {
     }
 
     private void doActivate() {
-        if (selected != null) {
-            session.activate(selected);
+        if (selected == null) {
+            return;
         }
+        long now = Util.getMeasuringTimeMs();
+        if (session.isDirty() && now > confirmActivateUntil) {
+            // un-applied picks in the Packs tab would be replaced by the profile: ask once more
+            confirmActivateUntil = now + CONFIRM_MS;
+            return;
+        }
+        confirmActivateUntil = 0;
+        session.activate(selected);
     }
 
     /** Selects a profile row programmatically (dev checks / keyboard). */
     public void selectProfile(String n) {
         selected = n;
         confirmDeleteUntil = 0;
+        confirmActivateUntil = 0;
     }
 
     @Override
@@ -289,7 +299,10 @@ public class ProfilesTab implements TabPanel {
         boolean isActive = sel != null && sel.name().equals(activeName());
         delete.enabled = sel != null && !isActive;
         activate.enabled = sel != null && session.index() != null && !session.isApplying();
-        activate.label(session.isApplying() ? "Wird angewendet…" : (isActive ? "Neu anwenden" : "Aktivieren"));
+        boolean confirmActivate = Util.getMeasuringTimeMs() < confirmActivateUntil;
+        activate.label(session.isApplying() ? "Wird angewendet…"
+                : confirmActivate ? "Änderungen verwerfen?" : (isActive ? "Neu anwenden" : "Aktivieren"));
+        activate.style = confirmActivate ? Button.Style.DANGER : Button.Style.PRIMARY;
         duplicate.enabled = rename.enabled = sel != null;
 
         name.render(ctx, mx, my, delta);
@@ -388,6 +401,7 @@ public class ProfilesTab implements TabPanel {
             if (button == 0 && cy >= 2 && i >= 0 && i < profiles.size()) {
                 selected = profiles.get(i).name();
                 confirmDeleteUntil = 0;
+                confirmActivateUntil = 0;
                 return true;
             }
             return false;
@@ -450,6 +464,9 @@ public class ProfilesTab implements TabPanel {
         }
         if (!delete.isMouseOver(mx, my)) {
             confirmDeleteUntil = 0;
+        }
+        if (!activate.isMouseOver(mx, my)) {
+            confirmActivateUntil = 0;
         }
         return list.mouseClicked(mx, my, button) || picks.mouseClicked(mx, my, button);
     }

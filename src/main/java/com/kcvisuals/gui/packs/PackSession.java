@@ -42,6 +42,12 @@ public final class PackSession {
     private Selection selection = Selection.empty();
     private Selection saved = Selection.empty();
     private boolean applying;
+    /** The stored profile still names packs that are gone; it stays "dirty" until the user applies without them. */
+    private boolean savedHasDropped;
+    /** Sequence of the newest apply, so a superseded apply cannot mark an older selection as saved. */
+    private int applySeq;
+    /** The first scan failed, so the profile was never loaded; applying now would overwrite it with nothing. */
+    private boolean selectionUnknown;
     private int revision;
     private boolean closed;
 
@@ -95,7 +101,7 @@ public final class PackSession {
     }
 
     public boolean isDirty() {
-        return !selection.equals(saved);
+        return savedHasDropped || !selection.equals(saved);
     }
 
     public void select(String categoryId, String packId) {
@@ -123,7 +129,7 @@ public final class PackSession {
         }
         loading = true;
         loadError = null;
-        boolean first = !loadedOnce;
+        boolean first = !loadedOnce || selectionUnknown;
         MinecraftClient mc = MinecraftClient.getInstance();
         CompletableFuture.supplyAsync(() -> {
             PackIndex idx = PackScanner.scan(paths.packs(), registry, paths.index());
@@ -139,6 +145,11 @@ public final class PackSession {
             if (err != null) {
                 KCVisuals.LOGGER.error("Scanning packs failed", err);
                 loadError = "Packs konnten nicht eingelesen werden";
+                if (activeProfile == null) {
+                    activeProfile = store.active();
+                }
+                selectionUnknown = selectionUnknown || first;
+                Toasts.show(Toasts.APPLY, "Packs konnten nicht eingelesen werden", "Details im Log");
                 if (index == null) {
                     index = new PackIndex(java.util.Map.of());
                 }
@@ -146,12 +157,19 @@ public final class PackSession {
                 return;
             }
             index = (PackIndex) res[0];
+            selectionUnknown = false;
             previews.evictAll();
             if (first) {
                 activeProfile = (String) res[1];
                 ProfileStore.LoadResult r = (ProfileStore.LoadResult) res[2];
                 selection = r.selection();
                 saved = selection;
+                if (!r.droppedCategories().isEmpty()) {
+                    // Keep the stored picks on disk; the session is dirty until the user applies without them.
+                    savedHasDropped = true;
+                    Toasts.multiline(Toasts.DROPPED, "Fehlende Packs",
+                            "Pack fehlt für: " + joinCategories(r.droppedCategories()) + ". Erst „Anwenden“ entfernt sie aus dem Profil.");
+                }
             } else {
                 // Keep the in-memory picks whose packs still exist.
                 Selection kept = selection;
@@ -172,15 +190,19 @@ public final class PackSession {
         if (index == null || activeProfile == null) {
             return;
         }
+        if (selectionUnknown) {
+            Toasts.show(Toasts.APPLY, "Anwenden nicht möglich", "Packs zuerst neu einlesen");
+            return;
+        }
         Selection sel = selection;
         String profile = activeProfile;
-        saved = sel;
+        int seq = ++applySeq;
         revision++;
         applying = true;
         Toasts.show(Toasts.APPLY, "Pack wird angewendet…", "Profil: " + profile);
         CompletableFuture.runAsync(() -> store.save(profile, sel), IO)
                 .thenCompose(v -> PackApplier.apply(sel))
-                .whenCompleteAsync((report, err) -> finishApply(report, err), MinecraftClient.getInstance());
+                .whenCompleteAsync((report, err) -> finishApply(seq, sel, report, err), MinecraftClient.getInstance());
     }
 
     /**
@@ -192,6 +214,7 @@ public final class PackSession {
             return;
         }
         PackIndex idx = index;
+        int seq = ++applySeq;
         applying = true;
         Toasts.show(Toasts.APPLY, "Pack wird angewendet…", "Profil: " + name);
         CompletableFuture.supplyAsync(() -> {
@@ -200,14 +223,17 @@ public final class PackSession {
         }, IO).thenComposeAsync(r -> {
             activeProfile = name;
             selection = r.selection();
-            saved = selection;
+            savedHasDropped = false;
             revision++;
             if (!r.droppedCategories().isEmpty()) {
                 Toasts.multiline(Toasts.DROPPED, "Kategorien entfernt",
                         "Pack fehlt für: " + joinCategories(r.droppedCategories()));
             }
-            return PackApplier.apply(r.selection());
-        }, MinecraftClient.getInstance()).whenCompleteAsync(this::finishApply, MinecraftClient.getInstance());
+            Selection sel = r.selection();
+            return PackApplier.apply(sel).thenApply(rep -> new Object[] {sel, rep});
+        }, MinecraftClient.getInstance()).whenCompleteAsync((o, err) -> finishApply(seq,
+                o == null ? null : (Selection) o[0], o == null ? null : (PackBuilder.BuildReport) o[1], err),
+                MinecraftClient.getInstance());
     }
 
     /** Called after profile files were renamed/deleted elsewhere so the active name stays in sync. */
@@ -220,14 +246,20 @@ public final class PackSession {
         revision++;
     }
 
-    private void finishApply(PackBuilder.BuildReport report, Throwable err) {
-        applying = false;
+    private void finishApply(int seq, Selection sel, PackBuilder.BuildReport report, Throwable err) {
+        if (seq == applySeq) {
+            applying = false;
+        }
         revision++;
         if (err != null) {
             Throwable cause = err.getCause() != null ? err.getCause() : err;
             KCVisuals.LOGGER.error("Apply from menu failed", err);
             Toasts.show(Toasts.APPLY, "Anwenden fehlgeschlagen", String.valueOf(cause.getMessage()));
             return;
+        }
+        if (seq == applySeq) {
+            saved = sel;
+            savedHasDropped = false;
         }
         Toasts.show(Toasts.APPLY, "Fertig (" + report.filesWritten() + (report.filesWritten() == 1 ? " Datei)" : " Dateien)"), "Profil: " + activeProfile);
         if (!report.missingPacks().isEmpty()) {

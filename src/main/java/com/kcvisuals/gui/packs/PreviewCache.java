@@ -43,7 +43,10 @@ public final class PreviewCache {
 
     public record Preview(Identifier id, int width, int height) {}
 
-    private enum State { LOADING, READY, NONE }
+    private enum State { LOADING, READY, NONE, MODEL_3D }
+
+    /** Raw preview bytes plus what is needed to judge them. {@code entries} is null for Vanilla. */
+    private record Raw(byte[] bytes, java.util.Set<String> entries, String entry) {}
 
     private static final class Entry {
         volatile State state = State.LOADING;
@@ -85,6 +88,15 @@ public final class PreviewCache {
         return e.state == State.READY ? e.preview : null;
     }
 
+    /**
+     * True if the pack's texture for this category is a UV atlas of a custom 3D item model; callers then show the
+     * Vanilla icon with a "3D" badge instead.
+     */
+    public boolean isModel3d(String packId, Category c) {
+        Entry e = entries.get(packId + '\u0000' + c.id());
+        return e != null && e.state == State.MODEL_3D;
+    }
+
     /** True while the preview is still being read; false when ready or known to be missing. */
     public boolean isLoading(String packId, Category c) {
         Entry e = entries.get(packId + '\u0000' + c.id());
@@ -97,9 +109,23 @@ public final class PreviewCache {
         }
         NativeImage img = null;
         try {
-            byte[] bytes = readBytes(packId, c);
-            if (bytes != null) {
-                img = prepare(NativeImage.read(bytes));
+            Raw raw = readRaw(packId, c);
+            if (raw != null) {
+                NativeImage decoded = NativeImage.read(raw.bytes());
+                boolean atlas;
+                try {
+                    int[] f = PreviewPick.firstFrame(decoded.getWidth(), decoded.getHeight());
+                    atlas = raw.entries() != null && PreviewPick.isModelAtlas(raw.entries(), raw.entry(), f[2], f[3]);
+                } catch (RuntimeException e) {
+                    decoded.close();
+                    throw e;
+                }
+                if (atlas) {
+                    decoded.close();
+                    entry.state = State.MODEL_3D;
+                    return;
+                }
+                img = prepare(decoded);
             }
         } catch (IOException | RuntimeException ex) {
             KCVisuals.LOGGER.debug("No preview for {} / {}: {}", packId, c.id(), ex.toString());
@@ -126,7 +152,7 @@ public final class PreviewCache {
         entry.state = State.READY;
     }
 
-    private byte[] readBytes(String packId, Category c) throws IOException {
+    private Raw readRaw(String packId, Category c) throws IOException {
         if (VANILLA.equals(packId)) {
             InputSupplier<InputStream> in = MinecraftClient.getInstance().getDefaultResourcePack()
                     .open(ResourceType.CLIENT_RESOURCES, Identifier.ofVanilla(c.previewPath()));
@@ -134,7 +160,7 @@ public final class PreviewCache {
                 return null;
             }
             try (InputStream s = in.get()) {
-                return s.readAllBytes();
+                return new Raw(s.readAllBytes(), null, null);
             }
         }
         PackSource src = source(packId);
@@ -146,7 +172,7 @@ public final class PreviewCache {
             return null;
         }
         try (InputStream s = src.open(entry)) {
-            return s.readAllBytes();
+            return new Raw(s.readAllBytes(), src.entries(), entry);
         }
     }
 
@@ -170,23 +196,35 @@ public final class PreviewCache {
         return src;
     }
 
-    /** First animation frame, shrunk with nearest-neighbour sampling if larger than {@link #MAX_SIZE}. */
+    /**
+     * First animation frame, shrunk with nearest-neighbour sampling if larger than {@link #MAX_SIZE}. Takes ownership
+     * of {@code src}: it is closed whenever a different image is returned or an exception is thrown.
+     */
     static NativeImage prepare(NativeImage src) {
-        int[] f = PreviewPick.firstFrame(src.getWidth(), src.getHeight());
-        int[] size = PreviewPick.fitWithin(f[2], f[3], MAX_SIZE);
-        if (f[2] == src.getWidth() && f[3] == src.getHeight() && size[0] == f[2] && size[1] == f[3]) {
-            return src;
-        }
-        NativeImage out = new NativeImage(size[0], size[1], false);
-        for (int y = 0; y < size[1]; y++) {
-            int sy = f[1] + (int) ((long) y * f[3] / size[1]);
-            for (int x = 0; x < size[0]; x++) {
-                int sx = f[0] + (int) ((long) x * f[2] / size[0]);
-                out.setColorArgb(x, y, src.getColorArgb(sx, sy));
+        NativeImage out = null;
+        try {
+            int[] f = PreviewPick.firstFrame(src.getWidth(), src.getHeight());
+            int[] size = PreviewPick.fitWithin(f[2], f[3], MAX_SIZE);
+            if (f[2] == src.getWidth() && f[3] == src.getHeight() && size[0] == f[2] && size[1] == f[3]) {
+                return src;
             }
+            out = new NativeImage(size[0], size[1], false);
+            for (int y = 0; y < size[1]; y++) {
+                int sy = f[1] + (int) ((long) y * f[3] / size[1]);
+                for (int x = 0; x < size[0]; x++) {
+                    int sx = f[0] + (int) ((long) x * f[2] / size[0]);
+                    out.setColorArgb(x, y, src.getColorArgb(sx, sy));
+                }
+            }
+            src.close();
+            return out;
+        } catch (RuntimeException | Error e) {
+            if (out != null) {
+                out.close();
+            }
+            src.close();
+            throw e;
         }
-        src.close();
-        return out;
     }
 
     /** Drops every preview and closes the textures and open packs. Must be called on the render thread. */

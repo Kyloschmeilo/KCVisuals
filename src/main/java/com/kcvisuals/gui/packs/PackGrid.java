@@ -165,15 +165,18 @@ public class PackGrid extends ScrollPanel {
             Draw.roundRect(ctx, cx - PREVIEW / 2 + 4, cy - PREVIEW / 2 + 4, PREVIEW - 8, PREVIEW - 8, 4,
                     Theme.withAlpha(Theme.SURFACE_HOVER, 0.5f + 0.5f * pulse));
         } else {
-            // The pack changes this category without a texture (models only): show the Vanilla image dimmed.
+            // No usable texture: models only ("Modell") or a UV atlas of a 3D item model ("3D").
+            // Show the Vanilla image dimmed with a badge instead.
+            String badge = session.previews().isModel3d(t.packId(), category) ? "3D" : "Modell";
             PreviewCache.Preview v = session.previews().preview(PreviewCache.VANILLA, category);
             if (v != null) {
                 int[] size = fit(v.width(), v.height(), PREVIEW);
                 ctx.drawTexture(RenderPipelines.GUI_TEXTURED, v.id(), cx - size[0] / 2, cy - size[1] / 2, 0, 0,
                         size[0], size[1], v.width(), v.height(), v.width(), v.height(), 0x59FFFFFF);
             }
-            Draw.roundRect(ctx, tx + 4, by + TILE - 12, TILE - 8, 9, 4, Theme.withAlpha(Theme.BORDER, 0.95f));
-            Draw.textCentered(ctx, "Modell", cx, by + TILE - 11, Theme.TEXT_DIM);
+            int bw = Math.min(TILE - 8, Draw.font().getWidth(badge) + 8);
+            Draw.roundRect(ctx, cx - bw / 2, by + TILE - 12, bw, 9, 4, Theme.withAlpha(Theme.BORDER, 0.95f));
+            Draw.textCentered(ctx, badge, cx, by + TILE - 11, Theme.TEXT_DIM);
         }
         if (sv > 0.01f) {
             // check badge, top right
