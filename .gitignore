@@ -4,3 +4,4 @@ build/
 run/
 packs/*.zip
 packs/**/*.zip
+logs/
