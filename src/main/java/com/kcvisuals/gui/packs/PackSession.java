@@ -250,6 +250,11 @@ public final class PackSession {
                 MinecraftClient.getInstance());
     }
 
+    /** Runs file IO off the render thread; the returned future completes on the client thread. */
+    public CompletableFuture<Void> runIO(Runnable work) {
+        return CompletableFuture.runAsync(work, IO).whenCompleteAsync((v, e) -> {}, MinecraftClient.getInstance());
+    }
+
     /** Called after profile files were renamed/deleted elsewhere so the active name stays in sync. */
     public void setActiveProfileName(String name) {
         activeProfile = name;

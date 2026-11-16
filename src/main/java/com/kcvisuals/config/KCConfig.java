@@ -25,7 +25,10 @@ public class KCConfig {
     private static final Logger LOG = LoggerFactory.getLogger("KC Visuals");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+    public static final int DEFAULT_ACCENT = 0xFF9B5CFF;
+
     private JsonObject hud;
+    private int accent = DEFAULT_ACCENT;
 
     public KCConfig() {
         this(new JsonObject());
@@ -43,6 +46,15 @@ public class KCConfig {
         this.hud = hud == null ? new JsonObject() : hud;
     }
 
+    /** Menu/HUD accent colour (opaque ARGB). */
+    public int accent() {
+        return accent;
+    }
+
+    public void setAccent(int argb) {
+        accent = argb | 0xFF000000;
+    }
+
     public void save(Path file, ModuleManager modules) {
         JsonObject root = new JsonObject();
         JsonObject mods = new JsonObject();
@@ -58,6 +70,9 @@ public class KCConfig {
         }
         root.add("modules", mods);
         root.add("hud", hud);
+        JsonObject theme = new JsonObject();
+        theme.addProperty("accent", accent);
+        root.add("theme", theme);
         try {
             Path parent = file.toAbsolutePath().getParent();
             if (parent != null) {
@@ -100,6 +115,17 @@ public class KCConfig {
             }
         } catch (RuntimeException e) {
             LOG.error("Fehler beim Lesen der HUD-Konfiguration", e);
+        }
+        try {
+            JsonElement t = root.get("theme");
+            if (t != null && t.isJsonObject()) {
+                JsonElement a = t.getAsJsonObject().get("accent");
+                if (a != null && a.isJsonPrimitive() && a.getAsJsonPrimitive().isNumber()) {
+                    cfg.setAccent((int) a.getAsLong());
+                }
+            }
+        } catch (RuntimeException e) {
+            LOG.error("Fehler beim Lesen des Themes", e);
         }
         JsonElement mods = root.get("modules");
         if (mods != null && mods.isJsonObject()) {

@@ -32,7 +32,14 @@ public class KCVisuals implements ClientModInitializer {
 
     /** Writes modules and the HUD slot to config/kcvisuals.json. */
     public static void saveConfig() {
+        config.setHud(HudManager.get().toJson());
         config.save(pathsOrDefault().config(), MODULES);
+    }
+
+    /** Installed mod version, e.g. "1.0.0". */
+    public static String version() {
+        return FabricLoader.getInstance().getModContainer(MOD_ID)
+                .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("");
     }
 
     /** Paths, also usable before the client entrypoint has run (e.g. from mixins during client construction). */
@@ -56,6 +63,7 @@ public class KCVisuals implements ClientModInitializer {
         registerModules();
         config = KCConfig.load(paths.config(), MODULES);
         HudManager.get().fromJson(config.hud());
+        com.kcvisuals.gui.Theme.ACCENT = config.accent();
         HudRenderer.register();
         com.kcvisuals.render.WorldRender.register();
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> saveConfig());

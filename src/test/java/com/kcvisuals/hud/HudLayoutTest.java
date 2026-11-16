@@ -11,6 +11,16 @@ class HudLayoutTest {
         l.setDefault("a", 1, 0, -4, 4);
         return l;
     }
+    @Test
+    void jsonRoundTripKeepsPositions() {
+        HudLayout a = layout();
+        a.drop("a", 100, 20, 854, 480, 300, 200);
+        HudLayout.Placement moved = a.get("a");
+        HudLayout b = layout();
+        b.fromJson(com.google.gson.JsonParser.parseString(a.toJson().toString()).getAsJsonObject());
+        assertEquals(moved, b.get("a"));
+        assertNotEquals(layout().get("a"), b.get("a"));
+    }
 
     @Test
     void anchorRightStaysRight() {

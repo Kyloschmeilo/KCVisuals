@@ -8,7 +8,7 @@ import com.kcvisuals.module.setting.NumberSetting;
 /**
  * Overworld sky look (SkyRenderingMixin, AtmosphericFogModifierMixin, FogRendererMixin, WorldTimeMixin). Everything
  * here is client-side rendering only: the fixed time replaces the time of day that the client world reports to its
- * own sky/light renderer, the server's time is never touched. "Nebel aus" only removes the atmospheric distance fog;
+ * own sky/light renderer, the server's time is never touched. "Nebel aus" only removes the atmospheric distance fog of the overworld (Nether and End keep their fog);
  * blindness, darkness, water, lava and powder snow fog are applied by other fog modifiers and stay untouched.
  */
 public class CustomSky extends Module {
@@ -23,11 +23,11 @@ public class CustomSky extends Module {
     public final ColorSetting horizon = add(new ColorSetting("horizon", "Horizont", DEFAULT_HORIZON));
     public final BoolSetting stars = add(new BoolSetting("stars", "Sterne", true));
     public final NumberSetting starBrightness = add(new NumberSetting("star_brightness", "Sternhelligkeit", 1.0, 0.0, 1.0, 0.05));
-    public final BoolSetting noFog = add(new BoolSetting("no_fog", "Nebel aus", false));
+    public final BoolSetting noFog = add(new BoolSetting("no_fog", "Nebel aus (nur Oberwelt)", false));
     public final BoolSetting fixedTime = add(new BoolSetting("fixed_time", "Feste Uhrzeit", true));
     public final NumberSetting time = add(new NumberSetting("time", "Uhrzeit (Ticks)", 18000, 0, 24000, 250));
 
-    /** Set while the atmospheric fog modifier is the active one this frame (not blindness, water, lava ...). */
+    /** Set while the overworld atmospheric fog modifier is the active one this frame (not blindness, water, lava, other dimensions). */
     private static boolean atmosphericFog;
 
     public CustomSky() {

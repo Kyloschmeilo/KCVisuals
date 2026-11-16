@@ -23,6 +23,7 @@ public final class StartupApply {
         }
         done = true;
         KCPaths paths = KCVisuals.pathsOrDefault();
+        boolean packEnabled = mc.getResourcePackManager().getEnabledIds().contains(GeneratedPackProvider.PACK_ID);
         CompletableFuture.supplyAsync(() -> {
             ProfileStore store = new ProfileStore(paths.profiles());
             String name = store.active();
@@ -32,11 +33,17 @@ public final class StartupApply {
             if (!r.droppedCategories().isEmpty()) {
                 KCVisuals.LOGGER.warn("Profile '{}': dropped categories with missing packs: {}", name, r.droppedCategories());
             }
-            return new Object[] {name, r.selection()};
+            boolean upToDate = packEnabled && PackStamp.matches(paths.generatedPack(),
+                    PackStamp.compute(r.selection(), index, KCVisuals.version()));
+            return new Object[] {name, r.selection(), upToDate};
         }).thenCompose(o -> {
             Selection sel = (Selection) o[1];
             if (sel.isEmpty()) {
                 KCVisuals.LOGGER.info("Active profile '{}' is empty, nothing to apply at startup", o[0]);
+                return CompletableFuture.completedFuture(null);
+            }
+            if ((boolean) o[2]) {
+                KCVisuals.LOGGER.info("Profile '{}' unchanged since the last build and its pack is enabled, skipping startup apply", o[0]);
                 return CompletableFuture.completedFuture(null);
             }
             KCVisuals.LOGGER.info("Applying active profile '{}' at startup ({} picks)", o[0], sel.picks().size());

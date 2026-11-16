@@ -31,8 +31,10 @@ public abstract class AtmosphericFogModifierMixin {
     @Inject(method = "applyStartEndModifier", at = @At("TAIL"))
     private void kcvisuals$noFog(FogData data, Camera camera, ClientWorld world, float viewDistanceBlocks,
             RenderTickCounter tickCounter, CallbackInfo ci) {
-        CustomSky.setAtmosphericFog(true);
-        if (CustomSky.removeFog()) {
+        // Overworld only: Nether/End fog is gameplay-relevant visibility and stays vanilla.
+        boolean overworld = world.getDimension().skybox() == DimensionType.Skybox.OVERWORLD;
+        CustomSky.setAtmosphericFog(overworld);
+        if (overworld && CustomSky.removeFog()) {
             data.environmentalStart = Float.MAX_VALUE;
             data.environmentalEnd = Float.MAX_VALUE;
         }

@@ -57,6 +57,11 @@ public final class PackApplier {
                     CategoryRegistry reg = registry();
                     PackIndex index = PackScanner.scan(paths.packs(), reg, paths.index());
                     PackBuilder.BuildReport report = PackBuilder.build(selection, index, reg, paths.generatedPack());
+                    try {
+                        PackStamp.write(paths.generatedPack(), PackStamp.compute(selection, index, KCVisuals.version()));
+                    } catch (java.io.IOException e) {
+                        KCVisuals.LOGGER.warn("Could not write pack stamp", e);
+                    }
                     KCVisuals.LOGGER.info("Built {}: {} files, missing packs {}, skipped entries {}", KCPaths.CUSTOM_PACK_NAME,
                             report.filesWritten(), report.missingPacks(), report.skippedEntries());
                     return report;

@@ -14,8 +14,8 @@ KC Visuals ist eine private, rein clientseitige Fabric-Mod für Minecraft 1.21.1
 
 Das Menü öffnest du mit `/kcv` oder über Mod Menu. Es hat vier Reiter:
 
-- **Packs**: links die Kategorien, rechts die Packs, die diese Kategorie enthalten (mit Vorschau). Pro Kategorie ein Pack wählen oder „Vanilla“. Mit **Anwenden** wird das Pack gebaut, aktiviert und die Ressourcen werden neu geladen. „Zurücksetzen“ verwirft ungespeicherte Änderungen.
-- **Visuals**: alle Module ein- und ausschalten und einstellen.
+- **Packs**: links die Kategorien, rechts die Packs, die diese Kategorie enthalten (mit Vorschau). Pro Kategorie ein Pack wählen oder „Vanilla“. Mit **Anwenden** wird das Pack gebaut, aktiviert und die Ressourcen werden neu geladen. „Zurücksetzen“ setzt alle Kategorien auf Vanilla (wirkt erst mit „Anwenden“).
+- **Visuals**: alle Module ein- und ausschalten und einstellen; oben die anpassbare Akzentfarbe des Menüs.
 - **HUD**: HUD-Elemente ein- und ausschalten und einstellen; der HUD-Editor erlaubt das Verschieben per Maus.
 - **Profile**: Profile anlegen, duplizieren, umbenennen, aktivieren und löschen. Das aktive Profil wird beim Start automatisch angewendet.
 
@@ -30,7 +30,7 @@ Das Menü öffnest du mit `/kcv` oder über Mod Menu. Es hat vier Reiter:
 - Trefferpartikel: Herzen, Sterne oder Funken am Ziel.
 - Hitbox-Stil: Farbe und Linienbreite der F3+B-Hitboxen.
 - Eigene Hand: Position, Größe, Drehung und Schlagtempo der Hand.
-- Eigener Himmel: Himmelsfarben, Sterne, Nebel und feste Uhrzeit.
+- Eigener Himmel: Himmelsfarben, Sterne, Nebel aus (nur Oberwelt; Nether und End behalten ihren Nebel) und feste Uhrzeit.
 - Fullbright: volle Helligkeit ohne Gamma-Änderung.
 - Fadenkreuz: Kreuz, Punkt, Kreis oder Plus-Punkt.
 - Seitenverhältnis: horizontal gestrecktes Bild.

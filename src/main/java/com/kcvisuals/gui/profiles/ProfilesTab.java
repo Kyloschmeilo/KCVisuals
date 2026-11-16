@@ -40,6 +40,7 @@ public class ProfilesTab implements TabPanel {
     private int builtRevision = -1;
     private long confirmDeleteUntil;
     private long confirmActivateUntil;
+    private boolean storeBusy;
     private String message;
     private int messageColor;
     private long messageUntil;
@@ -156,18 +157,37 @@ public class ProfilesTab implements TabPanel {
         if (n == null) {
             return;
         }
-        try {
-            session.store().save(n, Selection.empty());
+        ProfileStore store = session.store();
+        runStore(() -> store.save(n, Selection.empty()), "Profil „" + n + "“ angelegt", "Speichern fehlgeschlagen", () -> {
             selected = n;
             name.setText("");
-            session.touch();
-            flash("Profil „" + n + "“ angelegt", Theme.SUCCESS);
-        } catch (IllegalArgumentException e) {
-            flash("Ungültiger Name (nicht erlaubt: / \\ : * ? \" < > |)", Theme.DANGER);
-        } catch (RuntimeException e) {
-            KCVisuals.LOGGER.error("Creating profile failed", e);
-            flash("Speichern fehlgeschlagen", Theme.DANGER);
+        });
+    }
+
+    /**
+     * Runs a profile file operation on the IO thread; the UI part ({@code onSuccess}, touch, message) happens back on
+     * the client thread. Further file actions are ignored until it finished.
+     */
+    private void runStore(Runnable work, String okMessage, String failMessage, Runnable onSuccess) {
+        if (storeBusy) {
+            flash("Bitte kurz warten…", Theme.WARNING);
+            return;
         }
+        storeBusy = true;
+        session.runIO(work).whenComplete((v, err) -> {
+            storeBusy = false;
+            Throwable cause = err instanceof java.util.concurrent.CompletionException && err.getCause() != null ? err.getCause() : err;
+            if (cause == null) {
+                onSuccess.run();
+                session.touch();
+                flash(okMessage, Theme.SUCCESS);
+            } else if (cause instanceof IllegalArgumentException) {
+                flash("Ungültiger Name (nicht erlaubt: / \\ : * ? \" < > |)", Theme.DANGER);
+            } else {
+                KCVisuals.LOGGER.error("Profile operation failed", cause);
+                flash(failMessage, Theme.DANGER);
+            }
+        });
     }
 
     private void doDuplicate() {
@@ -179,19 +199,13 @@ public class ProfilesTab implements TabPanel {
         if (n == null) {
             return;
         }
-        try {
-            // save (not file copy) so a profile that only exists implicitly can be duplicated too
-            session.store().save(n, src.selection());
+        // save (not file copy) so a profile that only exists implicitly can be duplicated too
+        ProfileStore store = session.store();
+        Selection sel = src.selection();
+        runStore(() -> store.save(n, sel), "Kopie „" + n + "“ erstellt", "Duplizieren fehlgeschlagen", () -> {
             selected = n;
             name.setText("");
-            session.touch();
-            flash("Kopie „" + n + "“ erstellt", Theme.SUCCESS);
-        } catch (IllegalArgumentException e) {
-            flash("Ungültiger Name (nicht erlaubt: / \\ : * ? \" < > |)", Theme.DANGER);
-        } catch (RuntimeException e) {
-            KCVisuals.LOGGER.error("Duplicating profile failed", e);
-            flash("Duplizieren fehlgeschlagen", Theme.DANGER);
-        }
+        });
     }
 
     private String uniqueCopyName(String base) {
@@ -217,26 +231,26 @@ public class ProfilesTab implements TabPanel {
                 return;
             }
         }
-        try {
-            ProfileStore store = session.store();
-            store.save(n, src.selection());
-            if (!n.equalsIgnoreCase(src.name())) {
-                store.delete(src.name());
+        ProfileStore store = session.store();
+        Selection sel = src.selection();
+        String oldName = src.name();
+        String newName = n;
+        boolean wasActive = oldName.equals(activeName());
+        runStore(() -> {
+            store.save(newName, sel);
+            if (!newName.equalsIgnoreCase(oldName)) {
+                store.delete(oldName);
             }
-            if (src.name().equals(activeName())) {
-                store.setActive(n);
-                session.setActiveProfileName(n);
+            if (wasActive) {
+                store.setActive(newName);
             }
-            selected = n;
+        }, "Umbenannt in „" + n + "“", "Umbenennen fehlgeschlagen", () -> {
+            if (wasActive) {
+                session.setActiveProfileName(newName);
+            }
+            selected = newName;
             name.setText("");
-            session.touch();
-            flash("Umbenannt in „" + n + "“", Theme.SUCCESS);
-        } catch (IllegalArgumentException e) {
-            flash("Ungültiger Name (nicht erlaubt: / \\ : * ? \" < > |)", Theme.DANGER);
-        } catch (RuntimeException e) {
-            KCVisuals.LOGGER.error("Renaming profile failed", e);
-            flash("Umbenennen fehlgeschlagen", Theme.DANGER);
-        }
+        });
     }
 
     private void doDelete() {
@@ -254,15 +268,10 @@ public class ProfilesTab implements TabPanel {
             return;
         }
         confirmDeleteUntil = 0;
-        try {
-            session.store().delete(src.name());
-            selected = activeName();
-            session.touch();
-            flash("Profil „" + src.name() + "“ gelöscht", Theme.SUCCESS);
-        } catch (RuntimeException e) {
-            KCVisuals.LOGGER.error("Deleting profile failed", e);
-            flash("Löschen fehlgeschlagen", Theme.DANGER);
-        }
+        ProfileStore store = session.store();
+        String victim = src.name();
+        runStore(() -> store.delete(victim), "Profil „" + victim + "“ gelöscht", "Löschen fehlgeschlagen",
+                () -> selected = activeName());
     }
 
     private void doActivate() {

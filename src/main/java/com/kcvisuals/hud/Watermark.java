@@ -7,12 +7,18 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.network.ServerInfo;
 
-/** "KC Visuals | name | fps | ping | server" strip with an accent bar. */
+/** "KC Visuals 1.0.0 | name | fps | ping | server" strip with an accent bar. */
 public final class Watermark extends HudElement {
     private static final int H = 16;
 
     public Watermark() {
         super("watermark", "Wasserzeichen", "Name, FPS, Ping und Server");
+    }
+
+    private static final String TITLE = "KC Visuals " + version();
+
+    private static String version() {
+        return com.kcvisuals.KCVisuals.version();
     }
 
     private String rest = "";
@@ -21,7 +27,7 @@ public final class Watermark extends HudElement {
     @Override
     public void prepare(boolean preview) {
         rest = buildRest();
-        width = 10 + Draw.font().getWidth("KC Visuals" + rest) + 6;
+        width = 10 + Draw.font().getWidth(TITLE + rest) + 6;
     }
 
     private String buildRest() {
@@ -69,7 +75,7 @@ public final class Watermark extends HudElement {
         HudStyle.accentBar(ctx, x, y, H);
         int ty = y + (H - 8) / 2 + 1;
         int tx = x + 10;
-        Draw.text(ctx, "KC Visuals", tx, ty, Theme.ACCENT);
-        Draw.text(ctx, rest, tx + Draw.font().getWidth("KC Visuals"), ty, Theme.TEXT);
+        Draw.text(ctx, TITLE, tx, ty, Theme.ACCENT);
+        Draw.text(ctx, rest, tx + Draw.font().getWidth(TITLE), ty, Theme.TEXT);
     }
 }

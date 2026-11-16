@@ -68,6 +68,32 @@ class KCConfigTest {
         assertEquals("c", e.mode.get());
         assertEquals(3, loaded.hud().get("x").getAsInt());
     }
+    @Test
+    void themeAccentRoundTripAndFallback(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("t.json");
+        assertEquals(KCConfig.DEFAULT_ACCENT, KCConfig.load(file, manager()).accent());
+        KCConfig c = new KCConfig();
+        c.setAccent(0x00112233);
+        assertEquals(0xFF112233, c.accent());
+        c.save(file, manager());
+        assertEquals(0xFF112233, KCConfig.load(file, manager()).accent());
+        for (String bad : new String[] {"{\"theme\":{\"accent\":\"red\"}}", "{\"theme\":5}", "{\"theme\":{}}",
+                "{\"theme\":{\"accent\":null}}"}) {
+            Files.writeString(file, bad);
+            assertEquals(KCConfig.DEFAULT_ACCENT, KCConfig.load(file, manager()).accent(), bad);
+        }
+    }
+
+    @Test
+    void hudSlotSurvivesSaveAndLoad(@TempDir Path dir) {
+        Path file = dir.resolve("h.json");
+        KCConfig c = new KCConfig();
+        JsonObject hud = new JsonObject();
+        hud.addProperty("background", 0x80112233);
+        c.setHud(hud);
+        c.save(file, manager());
+        assertEquals(0x80112233, KCConfig.load(file, manager()).hud().get("background").getAsInt());
+    }
 
     @Test
     void unknownModuleIgnored(@TempDir Path dir) throws Exception {

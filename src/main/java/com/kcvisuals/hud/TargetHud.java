@@ -28,6 +28,8 @@ public final class TargetHud extends HudElement {
     private boolean preview;
     private float shownHealth = -1;
     private Entity shownFor;
+    private Float lastSeenHp;
+    private Entity lastSeenFor;
 
     public TargetHud() {
         super("target", "Ziel-HUD", "Zuletzt angegriffenes Ziel (8 s)");
@@ -70,6 +72,8 @@ public final class TargetHud extends HudElement {
         shown = null;
         shownFor = null;
         shownHealth = -1;
+        lastSeenHp = null;
+        lastSeenFor = null;
     }
 
     private static LivingEntity current() {
@@ -119,6 +123,15 @@ public final class TargetHud extends HudElement {
             armor = 12;
             ping = 23;
             skin = mc.player != null ? mc.player.getSkin() : null;
+        }
+        if (t != null && !this.preview) {
+            // Same rule as DamageNumbers: no new health information while the target is out of sight.
+            if (mc.player != null && !mc.player.canSee(t)) {
+                hp = lastSeenHp != null && lastSeenFor == t ? lastSeenHp : hp;
+            } else {
+                lastSeenHp = hp;
+                lastSeenFor = t;
+            }
         }
         if (t != shownFor || shownHealth < 0) {
             shownFor = t;

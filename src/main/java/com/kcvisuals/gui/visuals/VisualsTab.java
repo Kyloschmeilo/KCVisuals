@@ -1,5 +1,6 @@
 package com.kcvisuals.gui.visuals;
 
+import com.kcvisuals.KCVisuals;
 import com.kcvisuals.gui.TabPanel;
 import com.kcvisuals.gui.Theme;
 import com.kcvisuals.gui.widget.ColorPicker;
@@ -35,14 +36,25 @@ public class VisualsTab implements TabPanel {
     private final Map<Module, Card> cards = new IdentityHashMap<>();
     private final List<Card> order = new ArrayList<>();
     private final ModuleList list = new ModuleList();
+    private ColorPicker accent;
     private int x, y, w, h;
 
     public VisualsTab(ModuleManager modules) {
         this.modules = modules;
+        this.accent = new ColorPicker(0, 0, 0, ROW_H, "Akzentfarbe", Theme.ACCENT, this::onAccent);
         for (Module m : modules.all()) {
             Card c = new Card(m);
             cards.put(m, c);
             order.add(c);
+        }
+    }
+
+    private void onAccent(int v) {
+        int opaque = v | 0xFF000000;
+        Theme.ACCENT = opaque;
+        KCVisuals.config().setAccent(opaque);
+        if (v != opaque) {
+            accent.setColor(opaque); // the accent has no transparency
         }
     }
 
@@ -79,7 +91,7 @@ public class VisualsTab implements TabPanel {
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
-        boolean any = list.mouseReleased(mx, my, button);
+        boolean any = list.mouseReleased(mx, my, button) | accent.mouseReleased(mx, my, button);
         for (Card c : order) {
             for (Widget wd : c.widgets) {
                 any |= wd.mouseReleased(mx, my, button);
@@ -90,7 +102,7 @@ public class VisualsTab implements TabPanel {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
-        if (list.mouseDragged(mx, my, button, dx, dy)) {
+        if (list.mouseDragged(mx, my, button, dx, dy) || accent.mouseDragged(mx, my, button, dx, dy)) {
             return true;
         }
         for (Card c : order) {
@@ -113,9 +125,13 @@ public class VisualsTab implements TabPanel {
             super(0, 0, 0, 0);
         }
 
+        private int accentHeight() {
+            return ROW_H + 8 + (accent.isExpanded() ? ColorPicker.EXPANDED_H + 4 : 0) + GAP;
+        }
+
         @Override
         protected int contentHeight() {
-            int total = 0;
+            int total = accentHeight();
             for (Card c : order) {
                 total += c.height() + GAP;
             }
@@ -124,8 +140,9 @@ public class VisualsTab implements TabPanel {
 
         /** Positions every card and its widgets for the given content origin; returns nothing, mutates bounds. */
         private void layout(int top) {
-            int cy = top;
             int cw = w - 8; // leave room for the scrollbar
+            accent.setBounds(x + PAD + 4, top + 4, cw - 2 * PAD - 8, ROW_H);
+            int cy = top + accentHeight();
             for (Card c : order) {
                 c.layout(x, cy, cw);
                 cy += c.height() + GAP;
@@ -135,6 +152,10 @@ public class VisualsTab implements TabPanel {
         @Override
         protected void renderContent(DrawContext ctx, int mx, int my, float delta, int top, boolean inside) {
             layout(top);
+            int cw = w - 8;
+            Draw.roundRect(ctx, x, top, cw, ROW_H + 8 + (accent.isExpanded() ? ColorPicker.EXPANDED_H + 4 : 0), 6,
+                    Theme.withAlpha(Theme.SURFACE, 0.75f));
+            accent.render(ctx, mx, my, delta);
             for (Card c : order) {
                 c.render(ctx, mx, my, delta);
             }
@@ -143,6 +164,9 @@ public class VisualsTab implements TabPanel {
         @Override
         protected boolean contentClicked(double mx, double cy, int button) {
             layout(y - scroll());
+            if (accent.mouseClicked(mx, cy + y - scroll(), button)) {
+                return true;
+            }
             for (Card c : order) {
                 if (c.mouseClicked(mx, cy + y - scroll(), button)) {
                     return true;
