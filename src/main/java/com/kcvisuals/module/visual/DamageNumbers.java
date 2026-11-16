@@ -7,26 +7,34 @@ import com.kcvisuals.module.setting.NumberSetting;
 import com.kcvisuals.render.HitMath;
 import com.kcvisuals.render.Shapes;
 import com.kcvisuals.render.WorldRender;
-import it.unimi.dsi.fastutil.ints.Int2FloatOpenHashMap;
+import com.kcvisuals.render.HealthBaseline;
+import it.unimi.dsi.fastutil.ints.Int2BooleanOpenHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.render.Frustum;
 import net.minecraft.client.render.LightmapTextureManager;
+import net.minecraft.client.render.entity.EntityRenderManager;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 
 /**
  * Floating "-x.xx" numbers when a nearby living entity loses health. Uses only the health the client already receives
- * for entities it renders (synced entity data), within {@link #RANGE} blocks, skipping entities invisible to the
- * player. The text is depth tested (never visible through walls).
+ * (synced entity data), within {@link #RANGE} blocks, and only for entities the player can currently see: not
+ * invisible, inside the camera frustum and in line of sight. A hit on an entity that is hidden (behind a wall, out of
+ * view) is never shown, also not later (its baseline is dropped while hidden). The text is depth tested.
  */
 public class DamageNumbers extends Module implements WorldRender.Renderer, WorldRender.Ticker {
     public static final double RANGE = 32.0;
     public static final int MAX_NUMBERS = 48;
     public static final long LIFETIME_NS = 1_000_000_000L;
     public static final int RED = 0xFFFF3B3B;
+    /** Line-of-sight refresh interval per entity, in ticks. */
+    public static final int LOS_INTERVAL = 3;
 
     public final ColorSetting color1 = add(new ColorSetting("color1", "Farbe 1", RED));
     public final ColorSetting color2 = add(new ColorSetting("color2", "Farbe 2", Theme.ACCENT));
@@ -51,20 +59,27 @@ public class DamageNumbers extends Module implements WorldRender.Renderer, World
     private final long[] start = new long[MAX_NUMBERS];
     private int next;
 
-    // Last observed health per entity id; swapped every tick so entities that left are forgotten.
-    private Int2FloatOpenHashMap health = new Int2FloatOpenHashMap();
-    private Int2FloatOpenHashMap seen = new Int2FloatOpenHashMap();
+    private final HealthBaseline baseline = new HealthBaseline();
+    // Cached line-of-sight results of the last tick (only entities in range and view); swapped every tick.
+    private Int2BooleanOpenHashMap los = new Int2BooleanOpenHashMap();
+    private Int2BooleanOpenHashMap losNext = new Int2BooleanOpenHashMap();
+    private int tickCount;
+    /** Culling frustum of the last rendered frame (captured at the end of world extraction). */
+    private Frustum frustum;
     private Object lastWorld;
 
     public DamageNumbers() {
         super("damage_numbers", "Schadenszahlen", "Schwebende Schadenszahlen über getroffenen Wesen.");
+        WorldRenderEvents.END_EXTRACTION.register(ctx -> frustum = ctx.frustum());
     }
 
     @Override
     public void onDisable() {
         java.util.Arrays.fill(start, 0L);
-        health.clear();
+        baseline.clear();
+        los.clear();
         lastWorld = null;
+        frustum = null;
     }
 
     /** Adds a number at the given world position (also usable for previews). */
@@ -83,34 +98,54 @@ public class DamageNumbers extends Module implements WorldRender.Renderer, World
         if (mc.world != lastWorld) {
             lastWorld = mc.world;
             java.util.Arrays.fill(start, 0L);
-            health.clear();
+            baseline.clear();
+            los.clear();
         }
         if (mc.world == null || mc.player == null) {
             return;
         }
-        seen.clear();
+        tickCount++;
+        Frustum fr = frustum;
+        Vec3d cam = mc.gameRenderer.getCamera().getCameraPos();
+        EntityRenderManager erm = mc.getEntityRenderDispatcher();
+        losNext.clear();
         double r2 = RANGE * RANGE;
         for (Entity e : mc.world.getEntities()) {
-            if (!(e instanceof LivingEntity le) || e == mc.player || e.isInvisibleTo(mc.player)
-                    || e.squaredDistanceTo(mc.player) > r2) {
+            if (!(e instanceof LivingEntity le) || e == mc.player || e.squaredDistanceTo(mc.player) > r2) {
                 continue;
             }
-            float hp = le.getHealth();
             int id = e.getId();
-            seen.put(id, hp);
-            if (health.containsKey(id)) {
-                float drop = health.get(id) - hp;
-                if (drop >= 0.005f) {
-                    ThreadLocalRandom rnd = ThreadLocalRandom.current();
-                    double w = e.getWidth() * 0.5;
-                    spawn(e.getX() + (rnd.nextDouble() - 0.5) * w, e.getY() + e.getHeight() + 0.25,
-                            e.getZ() + (rnd.nextDouble() - 0.5) * w, drop);
-                }
+            float drop = baseline.observe(id, isVisible(mc, le, id, fr, erm, cam), le.getHealth());
+            if (drop > 0f) {
+                ThreadLocalRandom rnd = ThreadLocalRandom.current();
+                double w = e.getWidth() * 0.5;
+                spawn(e.getX() + (rnd.nextDouble() - 0.5) * w, e.getY() + e.getHeight() + 0.25,
+                        e.getZ() + (rnd.nextDouble() - 0.5) * w, drop);
             }
         }
-        Int2FloatOpenHashMap t = health;
-        health = seen;
-        seen = t;
+        baseline.endTick();
+        Int2BooleanOpenHashMap t = los;
+        los = losNext;
+        losNext = t;
+    }
+
+    /**
+     * Visible to the player right now: not invisible, inside the rendered view (same check the entity renderer uses)
+     * and in line of sight. The line-of-sight raycast runs only for entities that pass the cheap checks and is
+     * refreshed every {@link #LOS_INTERVAL} ticks per entity (staggered by id).
+     */
+    private boolean isVisible(MinecraftClient mc, LivingEntity e, int id, Frustum fr, EntityRenderManager erm, Vec3d cam) {
+        if (fr == null || e.isInvisibleTo(mc.player) || !erm.shouldRender(e, fr, cam.x, cam.y, cam.z)) {
+            return false;
+        }
+        boolean sees;
+        if (los.containsKey(id) && (tickCount + id) % LOS_INTERVAL != 0) {
+            sees = los.get(id);
+        } else {
+            sees = mc.player.canSee(e);
+        }
+        losNext.put(id, sees);
+        return sees;
     }
 
     @Override
