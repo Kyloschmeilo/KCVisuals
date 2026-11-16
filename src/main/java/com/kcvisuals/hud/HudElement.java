@@ -40,6 +40,12 @@ public abstract class HudElement {
         return MinecraftClient.getInstance();
     }
 
+    /** Computes this frame's state once; visible/width/height/render only read it. Called before every frame. */
+    public void prepare(boolean preview) {}
+
+    /** Drops references to world objects (called on disconnect). */
+    public void reset() {}
+
     /**
      * Whether there is anything to draw right now. In {@code preview} (HUD editor) every element is shown with
      * sample data so it can be positioned.

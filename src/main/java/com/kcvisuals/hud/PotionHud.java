@@ -23,8 +23,35 @@ public final class PotionHud extends HudElement {
         super("potions", "Statuseffekte", "Effekte mit Symbol und Restzeit");
     }
 
-    private List<StatusEffectInstance> effects(boolean preview) {
-        List<StatusEffectInstance> list = new ArrayList<>();
+    private final List<StatusEffectInstance> list = new ArrayList<>();
+    private final List<String> labels = new ArrayList<>();
+    private final List<String> times = new ArrayList<>();
+    private int width = 60;
+
+    @Override
+    public void prepare(boolean preview) {
+        fill(preview);
+        labels.clear();
+        times.clear();
+        int max = 40;
+        for (StatusEffectInstance e : list) {
+            String l = label(e), t = time(e);
+            labels.add(l);
+            times.add(t);
+            max = Math.max(max, Math.max(Draw.font().getWidth(l), Draw.font().getWidth(t)));
+        }
+        width = PAD + ICON + 5 + max + PAD + 2;
+    }
+
+    @Override
+    public void reset() {
+        list.clear();
+        labels.clear();
+        times.clear();
+    }
+
+    private void fill(boolean preview) {
+        list.clear();
         if (preview || mc().player == null) {
             list.add(new StatusEffectInstance(StatusEffects.SPEED, 20 * 92, 1));
             list.add(new StatusEffectInstance(StatusEffects.STRENGTH, 20 * 45, 0));
@@ -33,7 +60,6 @@ public final class PotionHud extends HudElement {
             list.addAll(mc().player.getStatusEffects());
             list.sort(Comparator.comparingInt(e -> e.isInfinite() ? Integer.MAX_VALUE : e.getDuration()));
         }
-        return list;
     }
 
     private static String label(StatusEffectInstance e) {
@@ -51,35 +77,31 @@ public final class PotionHud extends HudElement {
 
     @Override
     public boolean visible(boolean preview) {
-        return preview || !effects(false).isEmpty();
+        return !list.isEmpty();
     }
 
     @Override
     public int width(boolean preview) {
-        int max = 40;
-        for (StatusEffectInstance e : effects(preview)) {
-            max = Math.max(max, Math.max(Draw.font().getWidth(label(e)), Draw.font().getWidth(time(e))));
-        }
-        return PAD + ICON + 5 + max + PAD + 2;
+        return width;
     }
 
     @Override
     public int height(boolean preview) {
-        return effects(preview).size() * ROW_H + 2;
+        return list.size() * ROW_H + 2;
     }
 
     @Override
     public void render(DrawContext ctx, int x, int y, boolean preview) {
-        List<StatusEffectInstance> list = effects(preview);
-        int w = width(preview);
+        int w = width;
         HudStyle.panel(ctx, x, y, w, list.size() * ROW_H + 2);
         int ry = y + 1;
-        for (StatusEffectInstance e : list) {
+        for (int i = 0; i < list.size(); i++) {
+            StatusEffectInstance e = list.get(i);
             ctx.drawGuiTexture(RenderPipelines.GUI_TEXTURED, InGameHud.getEffectTexture(e.getEffectType()),
                     x + PAD, ry + (ROW_H - ICON) / 2, ICON, ICON);
             boolean low = !e.isInfinite() && e.getDuration() < 20 * 10;
-            Draw.text(ctx, label(e), x + PAD + ICON + 5, ry + 4, Theme.TEXT);
-            Draw.text(ctx, time(e), x + PAD + ICON + 5, ry + 13, low ? Theme.WARNING : Theme.TEXT_DIM);
+            Draw.text(ctx, labels.get(i), x + PAD + ICON + 5, ry + 4, Theme.TEXT);
+            Draw.text(ctx, times.get(i), x + PAD + ICON + 5, ry + 13, low ? Theme.WARNING : Theme.TEXT_DIM);
             ry += ROW_H;
         }
     }

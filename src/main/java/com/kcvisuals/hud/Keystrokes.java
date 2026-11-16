@@ -18,6 +18,10 @@ public final class Keystrokes extends HudElement {
     private static final CpsCounter LMB = new CpsCounter();
     private static final CpsCounter RMB = new CpsCounter();
     private static boolean lmbDown, rmbDown;
+    private static boolean seeded;
+    private final boolean[] down = new boolean[6];
+    private int lc, rc;
+    private boolean preview;
 
     /** pressed-animation state per key: W A S D LMB RMB */
     private final float[] anim = new float[6];
@@ -30,13 +34,20 @@ public final class Keystrokes extends HudElement {
     public static void poll() {
         MinecraftClient mc = MinecraftClient.getInstance();
         if (mc.currentScreen != null) {
-            lmbDown = rmbDown = false;
+            seeded = false;
             return;
         }
         long handle = mc.getWindow().getHandle();
         long now = Util.getMeasuringTimeMs();
         boolean l = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
         boolean r = GLFW.glfwGetMouseButton(handle, GLFW.GLFW_MOUSE_BUTTON_RIGHT) == GLFW.GLFW_PRESS;
+        if (!seeded) {
+            // first poll after a screen closed: adopt the current state so a held button is not counted as a click
+            seeded = true;
+            lmbDown = l;
+            rmbDown = r;
+            return;
+        }
         if (l && !lmbDown) {
             LMB.click(now);
         }
@@ -45,6 +56,21 @@ public final class Keystrokes extends HudElement {
         }
         lmbDown = l;
         rmbDown = r;
+    }
+
+    @Override
+    public void prepare(boolean preview) {
+        this.preview = preview;
+        GameOptions o = mc().options;
+        long now = Util.getMeasuringTimeMs();
+        down[0] = preview || o.forwardKey.isPressed();
+        down[1] = o.leftKey.isPressed();
+        down[2] = o.backKey.isPressed();
+        down[3] = o.rightKey.isPressed();
+        down[4] = lmbDown || preview;
+        down[5] = rmbDown;
+        lc = preview ? 8 : LMB.cps(now);
+        rc = preview ? 0 : RMB.cps(now);
     }
 
     @Override
@@ -59,14 +85,6 @@ public final class Keystrokes extends HudElement {
 
     @Override
     public void render(DrawContext ctx, int x, int y, boolean preview) {
-        GameOptions o = mc().options;
-        long now = Util.getMeasuringTimeMs();
-        boolean[] down = {
-            preview || o.forwardKey.isPressed(), o.leftKey.isPressed(), o.backKey.isPressed(), o.rightKey.isPressed(),
-            lmbDown || preview, rmbDown
-        };
-        int lc = preview ? 8 : LMB.cps(now);
-        int rc = preview ? 0 : RMB.cps(now);
         key(ctx, 0, x + KEY + GAP, y, KEY, KEY, "W", null, down[0]);
         int row2 = y + KEY + GAP;
         key(ctx, 1, x, row2, KEY, KEY, "A", null, down[1]);

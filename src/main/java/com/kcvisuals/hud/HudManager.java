@@ -26,7 +26,7 @@ public final class HudManager {
         add(new TargetHud(), 0.5, 0.5, 0, 40, false);
         add(new Keystrokes(), 1, 1, -6, -6, false);
         add(new ArmorTotemCounter(), 1, 0.5, -4, 0, false);
-        add(new Coordinates(), 1, 0, -4, 4, false);
+        add(new Coordinates(), 0, 0.5, 4, 0, false);
     }
 
     private void add(HudElement e, double ax, double ay, int ox, int oy, boolean on) {
@@ -68,8 +68,24 @@ public final class HudManager {
         return layout.resolve(e.id(), e.width(preview), e.height(preview), sw, sh);
     }
 
+    /** Per-frame state update of all enabled elements. */
+    public void prepare(boolean preview) {
+        for (HudElement e : elements) {
+            if (e.enabled()) {
+                e.prepare(preview);
+            }
+        }
+    }
+
+    public void resetAll() {
+        for (HudElement e : elements) {
+            e.reset();
+        }
+    }
+
     /** Draws every enabled, visible element. */
     public void renderAll(DrawContext ctx, int sw, int sh, boolean preview) {
+        prepare(preview);
         for (HudElement e : elements) {
             if (!e.enabled()) {
                 continue;

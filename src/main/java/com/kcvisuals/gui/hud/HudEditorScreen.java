@@ -45,6 +45,7 @@ public class HudEditorScreen extends Screen {
     @Override
     protected void init() {
         buttons.clear();
+        hud.prepare(true);
         String reset = "Zurücksetzen";
         String done = "Fertig";
         int rw = Button.widthFor(reset) + 8, gw = 96, dw = Button.widthFor(done) + 16;
@@ -72,6 +73,7 @@ public class HudEditorScreen extends Screen {
     @Override
     public void render(DrawContext ctx, int mx, int my, float delta) {
         Draw.beginFrame();
+        hud.prepare(true);
         MinecraftClient mc = MinecraftClient.getInstance();
         ctx.fill(0, 0, width, height, mc.world == null ? 0xE0101018 : 0x70101018);
         if (hud.gridSnap()) {
@@ -150,6 +152,7 @@ public class HudEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(Click click, boolean doubled) {
+        hud.prepare(true);
         double mx = click.x(), my = click.y();
         for (Button b : buttons) {
             if (b.mouseClicked(mx, my, click.button())) {

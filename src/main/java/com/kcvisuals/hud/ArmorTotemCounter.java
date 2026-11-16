@@ -24,8 +24,11 @@ public final class ArmorTotemCounter extends HudElement {
         super("armor", "Rüstung & Totems", "Totem-Anzahl und Haltbarkeit der Rüstung");
     }
 
-    private List<Row> rows(boolean preview) {
-        List<Row> rows = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
+
+    @Override
+    public void prepare(boolean preview) {
+        rows.clear();
         PlayerEntity p = mc().player;
         if (preview || p == null) {
             rows.add(new Row(new ItemStack(Items.TOTEM_OF_UNDYING), "x3", Theme.TEXT));
@@ -37,7 +40,7 @@ public final class ArmorTotemCounter extends HudElement {
             for (int i = 0; i < 4; i++) {
                 rows.add(new Row(sample[i], pct[i] + "%", durabilityColor(pct[i])));
             }
-            return rows;
+            return;
         }
         int totems = 0;
         for (ItemStack s : p.getInventory().getMainStacks()) {
@@ -58,7 +61,16 @@ public final class ArmorTotemCounter extends HudElement {
             int pct = s.isDamageable() ? Math.round(100f * (s.getMaxDamage() - s.getDamage()) / s.getMaxDamage()) : 100;
             rows.add(new Row(s, pct + "%", durabilityColor(pct)));
         }
-        return rows;
+    }
+
+    @Override
+    public void reset() {
+        rows.clear();
+    }
+
+    @Override
+    public boolean visible(boolean preview) {
+        return !rows.isEmpty();
     }
 
     private static int durabilityColor(int pct) {
@@ -72,12 +84,11 @@ public final class ArmorTotemCounter extends HudElement {
 
     @Override
     public int height(boolean preview) {
-        return rows(preview).size() * ROW_H + 4;
+        return rows.size() * ROW_H + 4;
     }
 
     @Override
     public void render(DrawContext ctx, int x, int y, boolean preview) {
-        List<Row> rows = rows(preview);
         HudStyle.panel(ctx, x, y, W, rows.size() * ROW_H + 4);
         int ry = y + 2;
         for (Row r : rows) {

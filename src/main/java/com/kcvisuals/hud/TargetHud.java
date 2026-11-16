@@ -23,8 +23,9 @@ public final class TargetHud extends HudElement {
     private static final int H = 40;
     private static final int HEAD = 28;
 
-    private static LivingEntity target;
-    private static long hitAt;
+    private static final TargetTracker<LivingEntity> TRACKER = new TargetTracker<>(SHOW_MS);
+    private LivingEntity shown;
+    private boolean preview;
     private float shownHealth = -1;
     private Entity shownFor;
 
@@ -34,22 +35,36 @@ public final class TargetHud extends HudElement {
 
     public static void setTarget(Entity e) {
         if (e instanceof LivingEntity le) {
-            target = le;
-            hitAt = Util.getMeasuringTimeMs();
+            TRACKER.set(le, Util.getMeasuringTimeMs());
         }
     }
 
-    private static LivingEntity current() {
-        LivingEntity t = target;
-        if (t == null || Util.getMeasuringTimeMs() - hitAt > SHOW_MS || t.isRemoved() || !t.isAlive()) {
-            return null;
+    public static void clearTarget() {
+        TRACKER.clear();
+    }
+
+    @Override
+    public void prepare(boolean preview) {
+        this.preview = preview;
+        shown = preview ? null : current();
+        if (shown == null) {
+            shownFor = null;
         }
-        return t;
+    }
+
+    @Override
+    public void reset() {
+        shown = null;
+        shownFor = null;
+    }
+
+    private static LivingEntity current() {
+        return TRACKER.current(Util.getMeasuringTimeMs(), t -> !t.isRemoved() && t.isAlive());
     }
 
     @Override
     public boolean visible(boolean preview) {
-        return preview || current() != null;
+        return this.preview || shown != null;
     }
 
     @Override
@@ -65,7 +80,7 @@ public final class TargetHud extends HudElement {
     @Override
     public void render(DrawContext ctx, int x, int y, boolean preview) {
         MinecraftClient mc = mc();
-        LivingEntity t = preview ? null : current();
+        LivingEntity t = this.preview ? null : shown;
         String name;
         float hp, max;
         int armor;

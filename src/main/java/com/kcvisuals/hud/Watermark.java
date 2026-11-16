@@ -15,7 +15,16 @@ public final class Watermark extends HudElement {
         super("watermark", "Wasserzeichen", "Name, FPS, Ping und Server");
     }
 
-    private String rest() {
+    private String rest = "";
+    private int width;
+
+    @Override
+    public void prepare(boolean preview) {
+        rest = buildRest();
+        width = 10 + Draw.font().getWidth("KC Visuals" + rest) + 6;
+    }
+
+    private String buildRest() {
         MinecraftClient mc = mc();
         String name = mc.getSession() != null ? mc.getSession().getUsername() : "Spieler";
         return " | " + name + " | " + mc.getCurrentFps() + " FPS | " + ping() + " ms | " + server();
@@ -45,7 +54,7 @@ public final class Watermark extends HudElement {
 
     @Override
     public int width(boolean preview) {
-        return 10 + Draw.font().getWidth("KC Visuals" + rest()) + 6;
+        return width;
     }
 
     @Override
@@ -55,12 +64,12 @@ public final class Watermark extends HudElement {
 
     @Override
     public void render(DrawContext ctx, int x, int y, boolean preview) {
-        int w = width(preview);
+        int w = width;
         HudStyle.panel(ctx, x, y, w, H);
         HudStyle.accentBar(ctx, x, y, H);
         int ty = y + (H - 8) / 2 + 1;
         int tx = x + 10;
         Draw.text(ctx, "KC Visuals", tx, ty, Theme.ACCENT);
-        Draw.text(ctx, rest(), tx + Draw.font().getWidth("KC Visuals"), ty, Theme.TEXT);
+        Draw.text(ctx, rest, tx + Draw.font().getWidth("KC Visuals"), ty, Theme.TEXT);
     }
 }

@@ -4,6 +4,7 @@ import com.kcvisuals.gui.KCScreen;
 import com.kcvisuals.gui.hud.HudEditorScreen;
 import com.kcvisuals.gui.widget.Draw;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -16,6 +17,10 @@ public final class HudRenderer {
 
     public static void register() {
         HudElementRegistry.addLast(Identifier.of("kcvisuals", "hud"), (ctx, tick) -> render(ctx));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            TargetHud.clearTarget();
+            HudManager.get().resetAll();
+        });
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hit) -> {
             if (world.isClient()) {
                 TargetHud.setTarget(entity);
