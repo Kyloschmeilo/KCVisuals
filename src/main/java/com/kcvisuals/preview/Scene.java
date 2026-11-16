@@ -15,6 +15,17 @@ import java.util.function.IntFunction;
 public final class Scene {
     /** Frames of the hover turn (one full revolution). */
     public static final int FRAMES = 24;
+    /** Most quads a model may have; pack models are untrusted. */
+    static final int MAX_QUADS = 4096;
+    /** Pixel tests allowed per frame, in full-image coverages (an ordinary model needs a handful). */
+    static final int FILL_COVERAGES = 64;
+
+    /** A model too large to preview (too many quads, or too much overdraw); callers fall back to a 2D preview. */
+    public static final class BudgetExceeded extends RuntimeException {
+        BudgetExceeded(String message) {
+            super(message, null, false, false);
+        }
+    }
     /** View of the placed crystal: looking down a little, between two sides. */
     static final double CRYSTAL_PITCH = 22, CRYSTAL_YAW = 45, CRYSTAL_SPIN = 20;
 
@@ -126,7 +137,7 @@ public final class Scene {
 
     private void draw(ArgbImage img, int size, int frame) {
         fit();
-        Rasterizer r = new Rasterizer(img);
+        Rasterizer r = new Rasterizer(img, (long) size * size * FILL_COVERAGES);
         double k = scale * size;
         double half = size / 2.0;
         for (Quad q : frames.apply(frame)) {
@@ -180,6 +191,9 @@ public final class Scene {
         List<Quad> out = new ArrayList<>();
         for (ModelElement e : model.elements()) {
             Mat4 rot = elementRotation(e.rotation());
+            if (out.size() + e.faces().size() > MAX_QUADS) {
+                throw new BudgetExceeded("more than " + MAX_QUADS + " quads");
+            }
             for (Map.Entry<Direction, ModelElement.Face> fe : e.faces().entrySet()) {
                 Direction d = fe.getKey();
                 ModelElement.Face face = fe.getValue();

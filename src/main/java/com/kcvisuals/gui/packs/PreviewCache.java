@@ -46,6 +46,12 @@ public final class PreviewCache {
         t.setPriority(Thread.NORM_PRIORITY - 1);
         return t;
     });
+    /** Hover strips: a second worker, so a strip never queues behind the grid's initial loads. */
+    private static final ExecutorService HOVER_WORKER = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "KC Visuals hover preview");
+        t.setDaemon(true);
+        return t;
+    });
     private static final AtomicInteger NEXT_ID = new AtomicInteger();
 
     /** What a preview shows: the category's item (or texture), or the placed end crystal. */
@@ -65,8 +71,6 @@ public final class PreviewCache {
     private static final class Entry {
         volatile State state = State.LOADING;
         volatile Preview preview;
-        /** 3D scene kept for rendering the hover strip; written by the worker before READY. */
-        volatile Scene scene;
     }
 
     /** Strips of the hovered tile (one per view); only one tile has strips at a time. Render thread only. */
@@ -161,21 +165,31 @@ public final class PreviewCache {
             return s;
         }
         Entry e = entries.get(key(packId, c, view));
-        Scene scene = e == null || e.state != State.READY ? null : e.scene;
-        if (scene == null) {
+        if (e == null || e.state != State.READY || e.preview == null || !e.preview.model()) {
             return null;
         }
         hover.requested.put(view, Boolean.TRUE);
         Hover target = hover;
         int gen = generation;
-        WORKER.execute(() -> {
+        PackIndex idx = index.get();
+        PackIndex.PackInfo info = VANILLA.equals(packId) || idx == null ? null : idx.packs().get(packId);
+        // Own thread and own zip handle: the strip does not wait behind the grid's initial loads, and no scene
+        // (quads + textures) has to be kept per tile. The model is resolved again for the hovered tile only.
+        HOVER_WORKER.execute(() -> {
             if (gen != generation || target != hover) {
                 return;
             }
             NativeImage img;
-            try {
-                img = toNative(scene.strip(ModelPreviews.SIZE));
-            } catch (RuntimeException ex) {
+            try (PackSource src = info == null ? null : PackSource.open(info.file())) {
+                if (src == null && !VANILLA.equals(packId)) {
+                    return;
+                }
+                ModelPreviews.Result r = ModelPreviews.compute(src, src == null ? null : ModelClosure.outputIndex(src.entries()), c, view);
+                if (r == null || r.scene() == null || gen != generation || target != hover) {
+                    return;
+                }
+                img = toNative(r.scene().strip(ModelPreviews.SIZE));
+            } catch (IOException | RuntimeException ex) {
                 KCVisuals.LOGGER.debug("Hover strip failed for {} / {}: {}", packId, c.id(), ex.toString());
                 return;
             }
@@ -212,7 +226,6 @@ public final class PreviewCache {
         try {
             ModelPreviews.Result model = modelPreview(packId, c, view);
             if (model != null) {
-                entry.scene = model.scene();
                 NativeImage rendered = toNative(model.image());
                 boolean is3d = model.scene() != null;
                 MinecraftClient.getInstance().execute(() -> upload(gen, entry, rendered, is3d));
@@ -263,18 +276,18 @@ public final class PreviewCache {
         if (view == View.ITEM && PreviewPick.previewItem(c) == null) {
             return null;
         }
-        ModelPreviews models;
-        if (VANILLA.equals(packId)) {
-            models = new ModelPreviews(null, null);
-        } else {
-            PackSource src = source(packId);
+        PackSource src = null;
+        Map<String, String> outIndex = null;
+        if (!VANILLA.equals(packId)) {
+            src = source(packId);
             if (src == null) {
                 return null;
             }
-            models = new ModelPreviews(src, sourceIndex.computeIfAbsent(packId, id -> ModelClosure.outputIndex(src.entries())));
+            PackSource s = src;
+            outIndex = sourceIndex.computeIfAbsent(packId, id -> ModelClosure.outputIndex(s.entries()));
         }
         try {
-            return view == View.PLACED ? models.placedCrystal() : models.item(PreviewPick.previewItem(c), GridLayout.isDoubleWidth(c.id()));
+            return ModelPreviews.compute(src, outIndex, c, view);
         } catch (RuntimeException e) {
             KCVisuals.LOGGER.debug("Model preview failed for {} / {}: {}", packId, c.id(), e.toString());
             return null;

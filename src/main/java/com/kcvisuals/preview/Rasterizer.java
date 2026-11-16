@@ -12,9 +12,12 @@ final class Rasterizer {
 
     private final ArgbImage target;
     private final float[] depth;
+    /** Pixel tests left before the frame is given up ({@link Scene.BudgetExceeded}). */
+    private long budget;
 
-    Rasterizer(ArgbImage target) {
+    Rasterizer(ArgbImage target, long budget) {
         this.target = target;
+        this.budget = budget;
         this.depth = new float[target.width() * target.height()];
         Arrays.fill(depth, Float.NEGATIVE_INFINITY);
     }
@@ -50,6 +53,10 @@ final class Rasterizer {
         int maxX = Math.min(w - 1, (int) Math.ceil(Math.max(ax, Math.max(bx, cx))));
         int minY = Math.max(0, (int) Math.floor(Math.min(ay, Math.min(by, cy))));
         int maxY = Math.min(h - 1, (int) Math.ceil(Math.max(ay, Math.max(by, cy))));
+        budget -= (long) Math.max(0, maxX - minX + 1) * Math.max(0, maxY - minY + 1);
+        if (budget < 0) {
+            throw new Scene.BudgetExceeded("fill budget exceeded");
+        }
         float[] uv = q.uv();
         double eps = -1e-7;
         int[] px = target.pixels();

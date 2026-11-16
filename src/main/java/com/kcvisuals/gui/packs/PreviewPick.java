@@ -72,6 +72,40 @@ public final class PreviewPick {
         return ITEM_ALIASES.getOrDefault(name, name);
     }
 
+    /**
+     * Other items of the category whose inventory model the pack defines, to preview a pack that changes a category
+     * member other than {@link #previewItem}: names from {@code items/<name>.json} first, then from
+     * {@code models/item/<name>.json} (legacy names mapped), each list sorted, without duplicates and without the
+     * preview item itself. Only {@code minecraft} entries directly in those folders count.
+     */
+    public static List<String> representativeItems(Set<String> entries, Category c) {
+        String skip = previewItem(c);
+        java.util.TreeSet<String> defs = new java.util.TreeSet<>();
+        java.util.TreeSet<String> models = new java.util.TreeSet<>();
+        for (String e : entries) {
+            PackPath p = PackPath.of(e);
+            if (p == null || !p.modern().endsWith(".json") || !p.in(c)) {
+                continue;
+            }
+            for (String dir : new String[] {"items/", "models/item/"}) {
+                String m = p.modern();
+                if (m.startsWith(dir) && m.indexOf('/', dir.length()) < 0) {
+                    String name = m.substring(dir.length(), m.length() - ".json".length());
+                    if (!name.isEmpty() && !name.equals(skip)) {
+                        (dir.equals("items/") ? defs : models).add(name);
+                    }
+                }
+            }
+        }
+        List<String> out = new ArrayList<>(defs);
+        for (String m : models) {
+            if (!defs.contains(m)) {
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
     /** Largest decoded image (pixels) a preview reads; a small PNG can still declare a huge size. */
     public static final long MAX_PIXELS = 4096L * 4096L;
 

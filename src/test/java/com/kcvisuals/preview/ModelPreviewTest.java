@@ -235,6 +235,54 @@ class ModelPreviewTest {
     }
 
     @Test
+    void conditionPrefersPackBranch() {
+        String kb = """
+                {"model":{"type":"condition","property":"component","predicate":"enchantments",
+                "on_true":{"type":"model","model":"kb1:item/kb1"},
+                "on_false":{"type":"model","model":"item/netherite_sword"}}}
+                """;
+        assertEquals("minecraft:item/netherite_sword", ItemDefinitions.pick(kb).model(), "no preference: idle branch");
+        assertEquals("kb1:item/kb1", ItemDefinitions.pick(kb, id -> id.startsWith("kb1:")).model());
+        assertEquals("minecraft:item/netherite_sword", ItemDefinitions.pick(kb, id -> false).model(),
+                "nothing from the pack: default choice");
+        String select = """
+                {"model":{"type":"select","property":"component","cases":[
+                  {"when":"a","model":{"type":"model","model":"item/vanilla_a"}},
+                  {"when":"b","model":{"type":"composite","models":[{"type":"model","model":"p:item/b"}]}}],
+                 "fallback":{"type":"model","model":"item/diamond_sword"}}}
+                """;
+        assertEquals("p:item/b", ItemDefinitions.pick(select, id -> id.startsWith("p:")).model());
+        // a display_context select never shows a non-gui branch in the inventory, even if that one is the pack's
+        String ctx = """
+                {"model":{"type":"select","property":"display_context","cases":[
+                  {"when":"gui","model":{"type":"model","model":"item/end_crystal"}}],
+                 "fallback":{"type":"model","model":"p:item/in_hand"}}}
+                """;
+        assertEquals("minecraft:item/end_crystal", ItemDefinitions.pick(ctx, id -> id.startsWith("p:")).model());
+    }
+
+    static ResolvedModel hugeCubes(int n) {
+        StringBuilder sb = new StringBuilder("{\"textures\":{\"a\":\"t:up\"},\"elements\":[");
+        for (int i = 0; i < n; i++) {
+            sb.append(i == 0 ? "" : ",").append(
+                    "{\"from\":[-16,-16,-16],\"to\":[32,32,32],\"faces\":{\"up\":{\"texture\":\"#a\"},\"down\":{\"texture\":\"#a\"},"
+                            + "\"north\":{\"texture\":\"#a\"},\"south\":{\"texture\":\"#a\"},\"east\":{\"texture\":\"#a\"},\"west\":{\"texture\":\"#a\"}}}");
+        }
+        return ModelResolver.resolve("t:m", Map.of("t:m", sb.append("]}").toString())::get);
+    }
+
+    @Test
+    void hostileModelsAreCapped() {
+        ResolvedModel many = hugeCubes(1000);
+        assertEquals(1000, many.elements().size());
+        assertThrows(Scene.BudgetExceeded.class, () -> Scene.item(many, colourTextures()), "6000 quads > cap");
+        Scene big = Scene.item(hugeCubes(300), colourTextures());
+        assertThrows(Scene.BudgetExceeded.class, () -> big.render(64, 0), "1800 huge quads exceed the fill budget");
+        // ordinary models stay well inside both caps
+        assertDoesNotThrow(() -> Scene.item(colourCube(), colourTextures()).strip(64));
+    }
+
+    @Test
     void endCrystalGeometryHasBaseAndCubes() {
         List<EndCrystalGeometry.Cuboid> parts = EndCrystalGeometry.cuboids();
         assertEquals(4, parts.size());

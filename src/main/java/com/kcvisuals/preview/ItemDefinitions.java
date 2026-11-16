@@ -4,7 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.function.Predicate;
 
 /**
  * Picks the one model an item definition ({@code assets/<ns>/items/<name>.json}, 1.21.4+) shows in the inventory:
@@ -14,6 +17,8 @@ import java.util.Locale;
  */
 public final class ItemDefinitions {
     private static final int MAX_DEPTH = 32;
+    /** Leaf models collected from one definition at most. */
+    private static final int MAX_LEAVES = 256;
 
     /** @param model normalised model id, or null; @param special true for a {@code minecraft:special} model */
     public record Pick(String model, boolean special) {
@@ -23,98 +28,103 @@ public final class ItemDefinitions {
     private ItemDefinitions() {}
 
     public static Pick pick(String json) {
+        return pick(json, null);
+    }
+
+    /**
+     * Like {@link #pick(String)}, but when {@code fromPack} is given the first model (in the same order) for which it
+     * is true wins over the default choice, so a pack whose definition only adds its own model on a non-default branch
+     * (e.g. a knockback condition) is previewed with that model. Non-gui branches of a {@code display_context} select
+     * are never considered: they are not shown in the inventory.
+     */
+    public static Pick pick(String json, Predicate<String> fromPack) {
         if (json == null) {
             return Pick.NONE;
         }
+        List<Pick> leaves = new ArrayList<>();
         try {
             JsonElement root = JsonParser.parseString(json);
             if (!root.isJsonObject()) {
                 return Pick.NONE;
             }
-            return node(root.getAsJsonObject().get("model"), 0);
+            collect(root.getAsJsonObject().get("model"), 0, leaves);
         } catch (RuntimeException e) {
             return Pick.NONE;
         }
+        if (fromPack != null) {
+            for (Pick p : leaves) {
+                if (p.model() != null && fromPack.test(p.model())) {
+                    return p;
+                }
+            }
+        }
+        return leaves.isEmpty() ? Pick.NONE : leaves.get(0);
     }
 
-    private static Pick node(JsonElement el, int depth) {
-        if (el == null || !el.isJsonObject() || depth > MAX_DEPTH) {
-            return Pick.NONE;
+    /** Leaf models in preference order (the default choice first). */
+    private static void collect(JsonElement el, int depth, List<Pick> out) {
+        if (el == null || !el.isJsonObject() || depth > MAX_DEPTH || out.size() >= MAX_LEAVES) {
+            return;
         }
         JsonObject o = el.getAsJsonObject();
         String type = strip(ModelResolver.string(o.get("type")));
         if (type == null) {
-            return Pick.NONE;
+            return;
         }
         switch (type) {
-            case "model": {
+            case "model" -> {
                 String m = ModelResolver.string(o.get("model"));
-                return m == null || m.isBlank() ? Pick.NONE : new Pick(ModelResolver.normalise(m), false);
+                if (m != null && !m.isBlank()) {
+                    out.add(new Pick(ModelResolver.normalise(m), false));
+                }
             }
-            case "special":
-                return new Pick(null, true);
-            case "select": {
+            case "special" -> out.add(new Pick(null, true));
+            case "select" -> {
                 JsonArray cases = o.get("cases") != null && o.get("cases").isJsonArray() ? o.getAsJsonArray("cases") : new JsonArray();
                 if ("display_context".equals(strip(ModelResolver.string(o.get("property"))))) {
+                    int before = out.size();
                     for (JsonElement c : cases) {
                         if (c.isJsonObject() && whenHas(c.getAsJsonObject().get("when"), "gui")) {
-                            Pick p = node(c.getAsJsonObject().get("model"), depth + 1);
-                            if (p.model() != null || p.special()) {
-                                return p;
-                            }
+                            collect(c.getAsJsonObject().get("model"), depth + 1, out);
                         }
                     }
+                    if (out.size() > before) {
+                        return; // the inventory only ever shows the gui case
+                    }
                 }
-                Pick fb = node(o.get("fallback"), depth + 1);
-                if (fb.model() != null || fb.special()) {
-                    return fb;
-                }
+                collect(o.get("fallback"), depth + 1, out);
                 for (JsonElement c : cases) {
                     if (c.isJsonObject()) {
-                        Pick p = node(c.getAsJsonObject().get("model"), depth + 1);
-                        if (p.model() != null || p.special()) {
-                            return p;
-                        }
+                        collect(c.getAsJsonObject().get("model"), depth + 1, out);
                     }
                 }
-                return Pick.NONE;
             }
-            case "condition": {
-                Pick p = node(o.get("on_false"), depth + 1);
-                return p.model() != null || p.special() ? p : node(o.get("on_true"), depth + 1);
+            case "condition" -> {
+                collect(o.get("on_false"), depth + 1, out);
+                collect(o.get("on_true"), depth + 1, out);
             }
-            case "range_dispatch": {
-                Pick fb = node(o.get("fallback"), depth + 1);
-                if (fb.model() != null || fb.special()) {
-                    return fb;
-                }
+            case "range_dispatch" -> {
+                collect(o.get("fallback"), depth + 1, out);
                 JsonElement entries = o.get("entries");
                 if (entries != null && entries.isJsonArray()) {
                     for (JsonElement e : entries.getAsJsonArray()) {
                         if (e.isJsonObject()) {
-                            Pick p = node(e.getAsJsonObject().get("model"), depth + 1);
-                            if (p.model() != null || p.special()) {
-                                return p;
-                            }
+                            collect(e.getAsJsonObject().get("model"), depth + 1, out);
                         }
                     }
                 }
-                return Pick.NONE;
             }
-            case "composite": {
+            case "composite" -> {
                 JsonElement models = o.get("models");
                 if (models != null && models.isJsonArray()) {
                     for (JsonElement m : models.getAsJsonArray()) {
-                        Pick p = node(m, depth + 1);
-                        if (p.model() != null || p.special()) {
-                            return p;
-                        }
+                        collect(m, depth + 1, out);
                     }
                 }
-                return Pick.NONE;
             }
-            default:
-                return Pick.NONE;
+            default -> {
+                // empty, bundle/selected_item...: nothing to show
+            }
         }
     }
 

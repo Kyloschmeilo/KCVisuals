@@ -1,6 +1,7 @@
 package com.kcvisuals.gui.packs;
 
 import com.kcvisuals.KCVisuals;
+import com.kcvisuals.pack.Category;
 import com.kcvisuals.pack.ModelClosure;
 import com.kcvisuals.pack.PackSource;
 import com.kcvisuals.preview.ArgbImage;
@@ -33,28 +34,70 @@ final class ModelPreviews {
     private static final int MAX_TEXTURE = 256;
     private static final String CRYSTAL_TEXTURE = "assets/minecraft/textures/entity/end_crystal/end_crystal.png";
 
-    /** A rendered preview; {@code scene} is set for 3D renders (used again for the hover strip). */
+    /** A rendered preview; {@code scene} is set for 3D renders (rendered again as the hover strip). */
     record Result(ArgbImage image, Scene scene) {}
+
+    /** Other category members tried at most when the preview item shows nothing of the pack. */
+    private static final int MAX_REPRESENTATIVES = 8;
+    /** Packs already logged for an over-budget model (log once). */
+    private static final java.util.Set<String> OVER_BUDGET_LOGGED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private final PackSource src;
     private final Map<String, String> index;
     private final Map<String, ArgbImage> textures = new HashMap<>();
-    /** True once anything was read from the pack rather than from vanilla. */
-    private boolean fromPack;
+    /** Set when a model json / texture was read from the pack rather than from vanilla. */
+    private boolean packModel, packTexture;
+    /** Whether the last {@link #bytes} call was served by the pack. */
+    private boolean lastFromPack;
 
     /** @param src the pack, or null for Vanilla; @param index its output-path index ({@link ModelClosure#outputIndex}) */
-    ModelPreviews(PackSource src, Map<String, String> index) {
+    private ModelPreviews(PackSource src, Map<String, String> index) {
         this.src = src;
         this.index = index;
     }
 
     /**
-     * The inventory model of {@code item}: a 3D render, a flat icon from its layers, or null when the 2D texture
-     * preview should be used instead (no model, a special/builtin model, or nothing in it comes from the pack).
-     * With {@code vanillaFallback} a pack that does not change the item still gets the vanilla item (used where the
-     * 2D fallback would show an unrelated texture of the category, e.g. the crystal entity atlas).
+     * The model preview of a tile, or null when the 2D texture preview should be used. ITEM: the category's preview
+     * item; if that shows nothing of the pack, the first other category member the pack defines (items/ or
+     * models/item/); for double-width categories finally the vanilla item. PLACED: the placed end crystal. Models
+     * over the render budget yield null (logged once per pack). Runs off the render thread.
      */
-    Result item(String item, boolean vanillaFallback) {
+    static Result compute(PackSource src, Map<String, String> index, Category c, PreviewCache.View view) {
+        try {
+            if (view == PreviewCache.View.PLACED) {
+                return new ModelPreviews(src, index).placedCrystal();
+            }
+            String item = PreviewPick.previewItem(c);
+            if (item == null) {
+                return null;
+            }
+            Result r = new ModelPreviews(src, index).item(item, false);
+            if (r == null && src != null) {
+                List<String> others = PreviewPick.representativeItems(src.entries(), c);
+                for (int i = 0; i < others.size() && i < MAX_REPRESENTATIVES && r == null; i++) {
+                    r = new ModelPreviews(src, index).item(others.get(i), false);
+                }
+            }
+            if (r == null && GridLayout.isDoubleWidth(c.id())) {
+                r = new ModelPreviews(src, index).item(item, true);
+            }
+            return r;
+        } catch (Scene.BudgetExceeded e) {
+            String who = src == null ? "vanilla" : src.id();
+            if (OVER_BUDGET_LOGGED.add(who)) {
+                KCVisuals.LOGGER.warn("Model preview for {} / {} skipped: {}", who, c.id(), e.getMessage());
+            }
+            return null;
+        }
+    }
+
+    /**
+     * The inventory model of {@code item}: a 3D render, a flat icon from its layers, or null when nothing visible
+     * comes from the pack (no model, a special/builtin model, only a display transform changed...). With
+     * {@code vanillaFallback} the vanilla item is returned as well (where the 2D fallback would show an unrelated
+     * texture of the category, e.g. the crystal entity atlas).
+     */
+    private Result item(String item, boolean vanillaFallback) {
         String defPath = ModelClosure.resolve("minecraft:" + item, "items/", ".json");
         if (defPath == null) {
             return null;
@@ -62,7 +105,7 @@ final class ModelPreviews {
         String def = json(defPath);
         String modelId;
         if (def != null) {
-            ItemDefinitions.Pick pick = ItemDefinitions.pick(def);
+            ItemDefinitions.Pick pick = ItemDefinitions.pick(def, src == null ? null : this::packHasModel);
             if (pick.special() || pick.model() == null) {
                 return null;
             }
@@ -72,12 +115,15 @@ final class ModelPreviews {
         }
         ResolvedModel model = ModelResolver.resolve(modelId, id -> {
             String path = ModelClosure.resolve(id, "models/", ".json");
-            return path == null ? null : json(path);
+            String json = path == null ? null : json(path);
+            packModel |= json != null && lastFromPack;
+            return json;
         });
+        boolean show = src == null || vanillaFallback;
         switch (model.kind()) {
             case MODEL -> {
                 Scene scene = Scene.item(model, this::texture);
-                if (src != null && !fromPack && !vanillaFallback) {
+                if (!show && !packModel && !packTexture) {
                     return null;
                 }
                 return new Result(scene.render(SIZE, 0), scene);
@@ -90,7 +136,8 @@ final class ModelPreviews {
                 for (String layer : model.layers()) {
                     layers.add(texture(layer));
                 }
-                ArgbImage icon = fromPack || vanillaFallback ? Scene.flat(layers) : null;
+                // a flat icon only looks different when one of its layers is from the pack
+                ArgbImage icon = packTexture || show ? Scene.flat(layers) : null;
                 return icon == null ? null : new Result(icon.region(0, 0, icon.width(), icon.height(), PreviewCache.MAX_SIZE), null);
             }
             default -> {
@@ -99,8 +146,13 @@ final class ModelPreviews {
         }
     }
 
-    /** The placed end crystal with the pack's entity texture (vanilla's if the pack has none). */
-    Result placedCrystal() {
+    private boolean packHasModel(String id) {
+        String path = ModelClosure.resolve(id, "models/", ".json");
+        return path != null && index != null && index.containsKey(path);
+    }
+
+    /** The placed end crystal with the pack entity texture (vanilla if the pack has none). */
+    private Result placedCrystal() {
         Scene scene = Scene.endCrystal(image(CRYSTAL_TEXTURE));
         return new Result(scene.render(SIZE, 0), scene);
     }
@@ -111,6 +163,7 @@ final class ModelPreviews {
         }
         String path = ModelClosure.resolve(id, "textures/", ".png");
         ArgbImage img = path == null ? null : image(path);
+        packTexture |= img != null && lastFromPack;
         textures.put(id, img);
         return img;
     }
@@ -145,19 +198,26 @@ final class ModelPreviews {
         }
     }
 
+    /**
+     * The file at the output path from the pack, else from vanilla. A pack file that is oversized or unreadable counts
+     * as missing (logged) and does not fall through to the vanilla file.
+     */
     private byte[] bytes(String outPath, int max) {
+        lastFromPack = false;
         if (src != null && index != null) {
             String raw = index.get(outPath);
             if (raw != null) {
                 try (InputStream in = src.open(raw)) {
                     byte[] b = PreviewPick.readCapped(in, max);
-                    if (b != null) {
-                        fromPack = true;
-                        return b;
+                    if (b == null) {
+                        KCVisuals.LOGGER.warn("{} in {} is larger than {} bytes, ignored for the preview", raw, src.id(), max);
+                        return null;
                     }
-                    KCVisuals.LOGGER.warn("{} in {} is larger than {} bytes, ignored for the preview", raw, src.id(), max);
+                    lastFromPack = true;
+                    return b;
                 } catch (IOException | RuntimeException e) {
-                    KCVisuals.LOGGER.debug("Unreadable {} in {}: {}", raw, src.id(), e.toString());
+                    KCVisuals.LOGGER.warn("Unreadable {} in {}, ignored for the preview: {}", raw, src.id(), e.toString());
+                    return null;
                 }
             }
         }

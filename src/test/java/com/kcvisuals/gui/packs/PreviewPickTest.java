@@ -224,4 +224,21 @@ class PreviewPickTest {
         assertEquals(-1, PreviewPick.pngPixels(new byte[10]));
         assertEquals(-1, PreviewPick.pngPixels("not a png at all, really not".getBytes()));
     }
+
+    @Test
+    void representativeItemFromPackUsedWhenPreviewItemMissing() {
+        Category swords = new Category("swords", "Waffen", "Schwerter", "textures/item/diamond_sword.png", List.of(
+                "textures/item/diamond_sword*", "textures/item/netherite_sword*", "textures/item/gold_sword*",
+                "models/item/netherite_sword*", "models/item/golden_sword*", "items/netherite_sword*", "items/diamond_sword*"));
+        // SMP Essentials: only an item definition for another category member (plus files of other categories)
+        Set<String> smp = Set.of("assets/minecraft/items/netherite_sword.json", "assets/kb1/models/item/kb1.json",
+                "assets/minecraft/items/totem_of_undying.json");
+        assertEquals(List.of("netherite_sword"), PreviewPick.representativeItems(smp, swords));
+        // item definitions first, then legacy model names mapped to the modern item; the preview item itself is left out
+        Set<String> legacy = Set.of("assets/minecraft/models/item/gold_sword.json",
+                "assets/minecraft/items/netherite_sword.json", "assets/minecraft/items/diamond_sword.json",
+                "assets/minecraft/models/item/netherite_sword/sub.json");
+        assertEquals(List.of("netherite_sword", "golden_sword"), PreviewPick.representativeItems(legacy, swords));
+        assertEquals(List.of(), PreviewPick.representativeItems(Set.of("assets/minecraft/textures/item/netherite_sword.png"), swords));
+    }
 }
