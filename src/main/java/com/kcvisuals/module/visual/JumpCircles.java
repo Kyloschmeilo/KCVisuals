@@ -34,6 +34,12 @@ public class JumpCircles extends Module implements WorldRender.Renderer, WorldRe
     private final long[] start = new long[MAX_CIRCLES];
     private int next;
     private final Map<UUID, Boolean> lastOnGround = new HashMap<>();
+    private Object lastWorld;
+
+    private void clearCircles() {
+        java.util.Arrays.fill(start, 0L);
+        lastOnGround.clear();
+    }
 
     public JumpCircles() {
         super("jump_circles", "Sprungkreise", "Leuchtende Ringe an den Füßen beim Springen und Landen.");
@@ -41,8 +47,8 @@ public class JumpCircles extends Module implements WorldRender.Renderer, WorldRe
 
     @Override
     public void onDisable() {
-        java.util.Arrays.fill(start, 0L);
-        lastOnGround.clear();
+        clearCircles();
+        lastWorld = null;
     }
 
     /** Adds a circle at the given feet position (also used for previews). */
@@ -57,6 +63,11 @@ public class JumpCircles extends Module implements WorldRender.Renderer, WorldRe
 
     @Override
     public void tick(MinecraftClient mc) {
+        if (mc.world != lastWorld) {
+            // disconnect, respawn into another dimension or server switch: drop circles from the old world
+            lastWorld = mc.world;
+            clearCircles();
+        }
         if (mc.world == null || mc.player == null) {
             lastOnGround.clear();
             return;

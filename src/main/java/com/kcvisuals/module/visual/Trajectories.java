@@ -39,7 +39,9 @@ import net.minecraft.world.RaycastContext;
  * player's own look direction and motion (the same inputs vanilla uses when throwing). Never for other entities.
  */
 public class Trajectories extends Module implements WorldRender.Renderer {
-    private static final int MAX_STEPS = 300;
+    private static final int MAX_STEPS = 150;
+    /** Collision is checked on chords spanning this many simulation steps (fewer raycasts per frame). */
+    private static final int RAY_STRIDE = 3;
 
     public final ColorSetting color = add(new ColorSetting("color", "Farbe", Theme.ACCENT));
     public final NumberSetting width = add(new NumberSetting("width", "Linienbreite", 3.0, 1.0, 6.0, 0.5));
@@ -48,6 +50,64 @@ public class Trajectories extends Module implements WorldRender.Renderer {
 
     private final double[] sim = new double[(MAX_STEPS + 1) * 3];
     private final float[] rel = new float[(MAX_STEPS + 1) * 3];
+
+    // Last simulated path; reused while the launch inputs and the world tick are unchanged.
+    private boolean cacheValid;
+    private long cTime;
+    private double cSx, cSy, cSz, cVx, cVy, cVz, cG, cD;
+    private int cN;
+    private BlockHitResult cHit;
+
+    @Override
+    public void onDisable() {
+        cacheValid = false;
+        cHit = null;
+    }
+
+    /**
+     * Simulates the path into {@link #sim} and cuts it at the first block hit. Raycasts run on chords of
+     * {@link #RAY_STRIDE} steps (at most MAX_STEPS / RAY_STRIDE per call); on a hit the path ends at the hit point.
+     */
+    private void simulateAndCollide(WorldRender.Frame f, ClientPlayerEntity p, double sx, double sy, double sz,
+                                    double vx, double vy, double vz, TrajectorySim.Kind kind) {
+        int n = TrajectorySim.simulateInto(sim, sx, sy, sz, vx, vy, vz, kind.gravity(), kind.drag(), MAX_STEPS);
+        BlockHitResult hit = null;
+        int bottom = f.mc.world.getBottomY() - 8;
+        Vec3d a = new Vec3d(sx, sy, sz);
+        for (int i = 0; i + 1 < n; i += RAY_STRIDE) {
+            int j = Math.min(i + RAY_STRIDE, n - 1);
+            Vec3d b = new Vec3d(sim[j * 3], sim[j * 3 + 1], sim[j * 3 + 2]);
+            BlockHitResult r = f.mc.world.raycast(new RaycastContext(a, b, RaycastContext.ShapeType.COLLIDER,
+                    RaycastContext.FluidHandling.NONE, p));
+            if (r.getType() == HitResult.Type.BLOCK) {
+                Vec3d h = r.getPos();
+                // keep the simulated points before the hit on this chord, then end at the hit
+                int k = i + 1;
+                double hd = h.squaredDistanceTo(a);
+                while (k < j && sqDist(k, a) < hd) {
+                    k++;
+                }
+                sim[k * 3] = h.x;
+                sim[k * 3 + 1] = h.y;
+                sim[k * 3 + 2] = h.z;
+                n = k + 1;
+                hit = r;
+                break;
+            }
+            if (b.y < bottom) {
+                n = j + 1;
+                break;
+            }
+            a = b;
+        }
+        cN = n;
+        cHit = hit;
+    }
+
+    private double sqDist(int k, Vec3d a) {
+        double dx = sim[k * 3] - a.x, dy = sim[k * 3 + 1] - a.y, dz = sim[k * 3 + 2] - a.z;
+        return dx * dx + dy * dy + dz * dz;
+    }
 
     public Trajectories() {
         super("trajectories", "Flugbahnen", "Zeigt die Flugbahn des Wurfgegenstands in deiner Hand mit Aufprallpunkt.");
@@ -70,7 +130,8 @@ public class Trajectories extends Module implements WorldRender.Renderer {
         }
         boolean using = p.isUsingItem() && p.getActiveHand() == hand;
         if (item instanceof BowItem) {
-            if (!using) {
+            // only while drawing, and only with ammunition (getProjectileType covers creative mode)
+            if (!using || p.getProjectileType(stack).isEmpty()) {
                 return null;
             }
             float pull = BowItem.getPullProgress(p.getItemUseTime());
@@ -88,7 +149,9 @@ public class Trajectories extends Module implements WorldRender.Renderer {
             return TrajectorySim.CROSSBOW_ARROW;
         }
         if (item instanceof TridentItem) {
-            if (!using || EnchantmentHelper.getTridentSpinAttackStrength(stack, p) > 0f) {
+            // thrown only after the 10-tick charge; riptide in water/rain launches the player instead
+            if (!using || p.getItemUseTime() < TridentItem.MIN_DRAW_DURATION
+                    || (EnchantmentHelper.getTridentSpinAttackStrength(stack, p) > 0f && p.isTouchingWaterOrRain())) {
                 return null;
             }
             return TrajectorySim.TRIDENT;
@@ -111,7 +174,8 @@ public class Trajectories extends Module implements WorldRender.Renderer {
         float td = f.tickDelta;
         float yaw = p.getYaw(td), pitch = p.getPitch(td);
         Vec3d pos = p.getLerpedPos(td);
-        double sx = pos.x, sy = pos.y + p.getStandingEyeHeight() - 0.1, sz = pos.z;
+        // Pose-correct eye height (sneaking, swimming, crawling), like the projectile spawn position.
+        double sx = pos.x, sy = pos.y + p.getEyeHeight(p.getPose()) - 0.1, sz = pos.z;
 
         // ProjectileEntity#setVelocity(shooter, pitch, yaw, roll, speed, 0)
         float rad = MathHelper.RADIANS_PER_DEGREE;
@@ -124,30 +188,19 @@ public class Trajectories extends Module implements WorldRender.Renderer {
         double vy = dy / len * kind.speed() + (p.isOnGround() ? 0 : mv.y);
         double vz = dz / len * kind.speed() + mv.z;
 
-        int n = TrajectorySim.simulateInto(sim, sx, sy, sz, vx, vy, vz, kind.gravity(), kind.drag(), MAX_STEPS);
-
-        // Block collision: raycast each segment, truncate at the first hit.
-        BlockHitResult hit = null;
-        int bottom = f.mc.world.getBottomY() - 8;
-        for (int i = 0; i + 1 < n; i++) {
-            Vec3d a = new Vec3d(sim[i * 3], sim[i * 3 + 1], sim[i * 3 + 2]);
-            Vec3d b = new Vec3d(sim[i * 3 + 3], sim[i * 3 + 4], sim[i * 3 + 5]);
-            BlockHitResult r = f.mc.world.raycast(new RaycastContext(a, b, RaycastContext.ShapeType.COLLIDER,
-                    RaycastContext.FluidHandling.NONE, p));
-            if (r.getType() == HitResult.Type.BLOCK) {
-                Vec3d h = r.getPos();
-                sim[i * 3 + 3] = h.x;
-                sim[i * 3 + 4] = h.y;
-                sim[i * 3 + 5] = h.z;
-                n = i + 2;
-                hit = r;
-                break;
-            }
-            if (b.y < bottom) {
-                n = i + 2;
-                break;
-            }
+        long worldTime = f.mc.world.getTime();
+        boolean same = cacheValid && worldTime == cTime && sx == cSx && sy == cSy && sz == cSz
+                && vx == cVx && vy == cVy && vz == cVz && kind.gravity() == cG && kind.drag() == cD;
+        if (!same) {
+            simulateAndCollide(f, p, sx, sy, sz, vx, vy, vz, kind);
+            cacheValid = true;
+            cTime = worldTime;
+            cSx = sx; cSy = sy; cSz = sz;
+            cVx = vx; cVy = vy; cVz = vz;
+            cG = kind.gravity(); cD = kind.drag();
         }
+        int n = cN;
+        BlockHitResult hit = cHit;
         if (n < 2) {
             return;
         }

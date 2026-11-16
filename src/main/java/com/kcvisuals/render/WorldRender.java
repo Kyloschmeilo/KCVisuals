@@ -50,6 +50,7 @@ public final class WorldRender {
     }
 
     private static final Frame FRAME = new Frame();
+    private static final java.util.Set<Module> FAILED = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Snapshot of the registered modules (registration is complete before {@link #register()}); avoids per-frame copies. */
     private static List<Module> modules = List.of();
 
@@ -60,8 +61,17 @@ public final class WorldRender {
         WorldRenderEvents.AFTER_ENTITIES.register(WorldRender::render);
         ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             for (Module m : modules) {
-                if (m instanceof Ticker t && (m.enabled() || alwaysTicks(m))) {
-                    t.tick(mc);
+                if (m instanceof Ticker t && (m.enabled() || alwaysTicks(m) && !FAILED.contains(m))) {
+                    try {
+                        t.tick(mc);
+                        if (m.enabled()) {
+                            FAILED.remove(m); // re-enabled by the user and working again
+                        }
+                    } catch (RuntimeException e) {
+                        KCVisuals.LOGGER.error("Fehler im Tick von {}", m.id(), e);
+                        FAILED.add(m); // AlwaysTicks modules would otherwise keep failing every tick
+                        m.setEnabled(false);
+                    }
                 }
             }
         });
