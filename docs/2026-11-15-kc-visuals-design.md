@@ -102,7 +102,7 @@ Jedes Modul hat An/Aus und eigene Einstellungen (Farbe mit Alpha, Größe, Dauer
 | Modul | Beschreibung |
 |---|---|
 | Jump Circles | Farbiger, auslaufender Ring beim Absprung/Landen |
-| Trajectories | Flugbahn-Bogen für Perle, Bogen, Dreizack, Tränke, Windladung (nur die eigene Hand) |
+| Trajectories | Flugbahn-Bogen für Perle, Bogen, Dreizack, Tränke, Windladung (nur die eigene Hand) | — **entfernt am 2026-11-16 auf Wunsch des Nutzers**
 | Hit Color | Farbe des Rot-Blitzes beim Treffer ändern |
 | Damage Numbers | Schwebende Schadenszahlen an getroffenen Entities |
 | Hit Particles | Eigene Partikel beim Treffer (Herzen, Sterne, Funken), mit Farbe und Anzahl |
@@ -119,7 +119,7 @@ Jedes Modul hat An/Aus und eigene Einstellungen (Farbe mit Alpha, Größe, Dauer
 ### 3. HUD
 
 Watermark-Leiste (Name, Version, FPS, Ping, Server), Trank-Effekte mit Restzeit,
-Target-HUD (Name, HP, Rüstung des zuletzt getroffenen Spielers), Keystrokes,
+Target-HUD (entfernt am 2026-11-16 auf Wunsch des Nutzers; Name, HP, Rüstung des zuletzt getroffenen Spielers), Keystrokes,
 Rüstungs-/Totem-Zähler, Koordinaten. Ein HUD-Editor erlaubt das Verschieben per
 Drag & Drop. Positionen werden relativ gespeichert, damit sie auch bei anderer
 Auflösung passen.

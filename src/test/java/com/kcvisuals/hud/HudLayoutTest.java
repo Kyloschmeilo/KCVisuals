@@ -128,6 +128,22 @@ class HudLayoutTest {
     }
 
     @Test
+    void unknownHudElementIgnored() {
+        // old configs may still carry the removed "target" element
+        JsonObject old = new JsonObject();
+        JsonObject target = new JsonObject();
+        target.addProperty("ax", 0.5);
+        target.addProperty("ay", 0.5);
+        target.addProperty("ox", 0);
+        target.addProperty("oy", 40);
+        old.add("target", target);
+        HudLayout l = layout();
+        l.fromJson(old);
+        assertNull(l.toJson().get("target"));
+        assertEquals(1.0, l.get("a").ax());
+    }
+
+    @Test
     void edgeAndCenterSnapBeatGrid() {
         // 854 wide screen, 100 wide element: edges at 0 and 754, centre at 377
         assertEquals(0, HudLayout.snapAxis(3, 100, 854, 8, 4));

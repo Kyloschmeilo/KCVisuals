@@ -22,7 +22,6 @@ Das Menü öffnest du mit `/kcv` oder über Mod Menu. Es hat vier Reiter:
 ## Visual-Module
 
 - Sprungkreise: leuchtende Ringe an den Füßen beim Springen und Landen.
-- Flugbahnen: Bahn und Aufprallpunkt des Wurfgegenstands in der Hand.
 - China-Hut: durchscheinender Kegel über dem Kopf (dritte Person).
 - Todesmarker: markiert den letzten Todespunkt.
 - Trefferfarbe: färbt getroffene Wesen in deiner Farbe.
@@ -40,7 +39,6 @@ Das Menü öffnest du mit `/kcv` oder über Mod Menu. Es hat vier Reiter:
 
 - Wasserzeichen: Name, FPS, Ping und Server.
 - Statuseffekte: Effekte mit Symbol und Restzeit.
-- Ziel-HUD: zuletzt angegriffenes Ziel (8 s).
 - Tastenanzeige: WASD, Maustasten und CPS.
 - Rüstung & Totems: Totem-Anzahl und Haltbarkeit der Rüstung.
 - Koordinaten: XYZ und Blickrichtung.

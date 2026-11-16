@@ -23,7 +23,6 @@ public final class HudManager {
     private HudManager() {
         add(new Watermark(), 0, 0, 4, 4, true);
         add(new PotionHud(), 0, 0, 4, 26, false);
-        add(new TargetHud(), 0.5, 0.5, 0, 40, false);
         add(new Keystrokes(), 1, 1, -6, -6, false);
         add(new ArmorTotemCounter(), 1, 0.5, -4, 0, false);
         add(new Coordinates(), 0, 0.5, 4, 0, false);

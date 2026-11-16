@@ -108,6 +108,18 @@ class KCConfigTest {
     }
 
     @Test
+    void removedModuleIgnored(@TempDir Path dir) throws Exception {
+        Path file = dir.resolve("c.json");
+        Files.writeString(file, "{\"modules\":{\"trajectories\":{\"enabled\":true,\"settings\":{\"pearl\":true}},\"demo\":{\"enabled\":true}},"
+                + "\"hud\":{\"enabled\":{\"target\":true},\"layout\":{\"target\":{\"ax\":0.5,\"ay\":0.5,\"ox\":0,\"oy\":40}}}}");
+        ModuleManager m = manager();
+        KCConfig cfg = KCConfig.load(file, m);
+        assertTrue(m.get(Demo.class).enabled());
+        assertNull(m.byId("trajectories"));
+        assertNotNull(cfg.hud());
+    }
+
+    @Test
     void outOfRangeNumberClamped(@TempDir Path dir) throws Exception {
         Path file = dir.resolve("c.json");
         Files.writeString(file, "{\"modules\":{\"demo\":{\"settings\":{\"amount\":99,\"mode\":\"zzz\"}}}}");

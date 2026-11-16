@@ -82,7 +82,6 @@ public class KCVisuals implements ClientModInitializer {
      */
     private static void registerModules() {
         MODULES.register(new com.kcvisuals.module.visual.JumpCircles());
-        MODULES.register(new com.kcvisuals.module.visual.Trajectories());
         MODULES.register(new com.kcvisuals.module.visual.ChinaHat());
         MODULES.register(new com.kcvisuals.module.visual.DeathMarker());
         MODULES.register(new com.kcvisuals.module.visual.HitColor());
