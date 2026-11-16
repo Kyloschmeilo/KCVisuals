@@ -81,7 +81,12 @@ public class KCVisuals implements ClientModInitializer {
         MODULES.register(new com.kcvisuals.module.visual.DamageNumbers());
         MODULES.register(new com.kcvisuals.module.visual.HitParticles());
         MODULES.register(new com.kcvisuals.module.visual.HitboxStyle());
-        // Task 11: MODULES.register(...)
+        MODULES.register(new com.kcvisuals.module.visual.CustomHand());
+        MODULES.register(new com.kcvisuals.module.visual.CustomSky());
+        MODULES.register(new com.kcvisuals.module.visual.Fullbright());
+        MODULES.register(new com.kcvisuals.module.visual.Crosshair());
+        MODULES.register(new com.kcvisuals.module.visual.AspectRatio());
+        MODULES.register(new com.kcvisuals.module.visual.RenderTweaks());
     }
 
     /** Opens the menu on the next client tick (chat closes the current screen after a command runs). */

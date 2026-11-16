@@ -4,7 +4,13 @@
   "package": "com.kcvisuals.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
-  "client": ["EntityHitboxDebugRendererMixin", "OverlayTextureMixin", "ResourcePackManagerMixin"],
+  "client": [
+    "EntityHitboxDebugRendererMixin", "OverlayTextureMixin", "ResourcePackManagerMixin",
+    "AtmosphericFogModifierMixin", "ClientWorldParticlesMixin", "FogRendererMixin", "GameRendererHurtCamMixin",
+    "GameRendererProjectionMixin", "HeldItemRendererMixin", "InGameHudCrosshairMixin", "InGameHudPumpkinMixin",
+    "InGameOverlayRendererMixin", "LightmapMixin", "LivingEntitySwingMixin", "ParticleManagerMixin",
+    "SkyRenderingMixin", "TotemAnimationMixin", "WorldTimeMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
