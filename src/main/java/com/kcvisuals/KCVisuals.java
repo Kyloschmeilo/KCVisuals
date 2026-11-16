@@ -57,6 +57,7 @@ public class KCVisuals implements ClientModInitializer {
         config = KCConfig.load(paths.config(), MODULES);
         HudManager.get().fromJson(config.hud());
         HudRenderer.register();
+        com.kcvisuals.render.WorldRender.register();
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> saveConfig());
         com.kcvisuals.pack.StartupApply.register();
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
@@ -72,7 +73,11 @@ public class KCVisuals implements ClientModInitializer {
      * The HUD elements are not modules: {@link HudManager} owns them and their state is stored in the config's hud slot.
      */
     private static void registerModules() {
-        // Task 9-11: MODULES.register(...)
+        MODULES.register(new com.kcvisuals.module.visual.JumpCircles());
+        MODULES.register(new com.kcvisuals.module.visual.Trajectories());
+        MODULES.register(new com.kcvisuals.module.visual.ChinaHat());
+        MODULES.register(new com.kcvisuals.module.visual.DeathMarker());
+        // Task 10-11: MODULES.register(...)
     }
 
     /** Opens the menu on the next client tick (chat closes the current screen after a command runs). */
