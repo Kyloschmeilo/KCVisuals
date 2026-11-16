@@ -4,7 +4,7 @@
   "package": "com.kcvisuals.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
-  "client": ["ResourcePackManagerMixin"],
+  "client": ["EntityHitboxDebugRendererMixin", "OverlayTextureMixin", "ResourcePackManagerMixin"],
   "injectors": {
     "defaultRequire": 1
   }
