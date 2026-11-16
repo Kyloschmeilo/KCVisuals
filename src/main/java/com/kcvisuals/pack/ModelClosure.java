@@ -24,7 +24,7 @@ import java.util.TreeMap;
  * All paths here are full output paths ({@link PackPath#output}), so legacy names and other namespaces resolve the
  * same way the files are written.
  */
-final class ModelClosure {
+public final class ModelClosure {
     private static final System.Logger LOG = System.getLogger("kcvisuals");
     private static final java.util.regex.Pattern NAMESPACE = java.util.regex.Pattern.compile("[a-z0-9_.-]+");
     private static final java.util.regex.Pattern RESOURCE_PATH = java.util.regex.Pattern.compile("[a-z0-9/._-]+");
@@ -32,7 +32,7 @@ final class ModelClosure {
     private ModelClosure() {}
 
     /** Output path to raw entry for every file of the pack; a modern entry wins over a legacy one mapping to it. */
-    static Map<String, String> outputIndex(Collection<String> entries) {
+    public static Map<String, String> outputIndex(Collection<String> entries) {
         Map<String, String> index = new TreeMap<>();
         for (String entry : new java.util.TreeSet<>(entries)) {
             String out = PackPath.output(entry);
@@ -138,7 +138,7 @@ final class ModelClosure {
     }
 
     /** {@code [ns:]path} to the output path {@code assets/<ns>/<dir><path><ext>}; minecraft is the default. */
-    static String resolve(String id, String dir, String ext) {
+    public static String resolve(String id, String dir, String ext) {
         String lower = id.trim().toLowerCase(Locale.ROOT);
         int colon = lower.indexOf(':');
         String ns = colon < 0 ? "minecraft" : lower.substring(0, colon);

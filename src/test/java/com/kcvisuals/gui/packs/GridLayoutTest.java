@@ -41,4 +41,21 @@ class GridLayoutTest {
         assertEquals(-1, g.indexAt(-1, 5, 7));
         assertEquals(-1, g.indexAt(264 + 6, 5, 7));
     }
+
+    @Test
+    void doubleWidthTilesForCrystalCategory() {
+        GridLayout crystal = GridLayout.forCategory(300, "end_crystal", 48, 60, 6);
+        assertEquals(2 * 48 + 6, crystal.cellW());
+        assertEquals(2, crystal.columns()); // 2*102 + 6 = 210 <= 300, 3 columns need 318
+        assertEquals((300 - 210) / 2, crystal.offsetX());
+        assertEquals(45 + 108, crystal.cellX(1));
+        assertEquals(1, crystal.indexAt(160, 5, 3));
+        assertEquals(0, crystal.indexAt(45 + 90, 5, 3), "the right half of a wide tile belongs to it");
+        GridLayout swords = GridLayout.forCategory(300, "swords", 48, 60, 6);
+        assertEquals(48, swords.cellW());
+        assertEquals(5, swords.columns());
+        assertTrue(GridLayout.isDoubleWidth("end_crystal"));
+        assertFalse(GridLayout.isDoubleWidth("swords"));
+        assertFalse(GridLayout.isDoubleWidth(null));
+    }
 }

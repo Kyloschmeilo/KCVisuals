@@ -5,6 +5,19 @@ package com.kcvisuals.gui.packs;
  * Coordinates are relative to the grid area's top-left corner. Pure Java, unit tested.
  */
 public record GridLayout(int columns, int cellW, int cellH, int gapX, int gapY, int offsetX) {
+    /** Categories whose tiles show two previews side by side (end crystal: placed and item). */
+    private static final java.util.Set<String> DOUBLE_WIDTH = java.util.Set.of("end_crystal");
+
+    public static boolean isDoubleWidth(String categoryId) {
+        return categoryId != null && DOUBLE_WIDTH.contains(categoryId);
+    }
+
+    /** {@link #fit} with the category's tile width: {@code tile}, or two tiles plus a gap for double-width categories. */
+    public static GridLayout forCategory(int width, String categoryId, int tile, int cellH, int gap) {
+        int cellW = isDoubleWidth(categoryId) ? 2 * tile + gap : tile;
+        return fit(width, cellW, cellH, gap, gap);
+    }
+
     public static GridLayout fit(int width, int cellW, int cellH, int gapX, int gapY) {
         int cols = Math.max(1, (width + gapX) / (cellW + gapX));
         int used = cols * cellW + (cols - 1) * gapX;

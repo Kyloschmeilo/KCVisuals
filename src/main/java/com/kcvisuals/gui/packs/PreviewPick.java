@@ -48,6 +48,52 @@ public final class PreviewPick {
         return fallback;
     }
 
+    /** Preview textures whose name is not the item's: the item whose model shows the category. */
+    private static final java.util.Map<String, String> ITEM_ALIASES = java.util.Map.of(
+            "crossbow_standby", "crossbow",
+            "respawn_anchor_top", "respawn_anchor");
+
+    /**
+     * The item whose inventory model previews the category, derived from {@code previewPath}
+     * ({@code textures/item/<name>.png} or {@code textures/block/<name>.png}); null for categories that are not an item
+     * (particles, GUI, sky...). Whether the item really exists is decided by the model lookup.
+     */
+    public static String previewItem(Category c) {
+        String p = c.previewPath();
+        String name = null;
+        for (String dir : new String[] {"textures/item/", "textures/block/"}) {
+            if (p.startsWith(dir) && p.endsWith(".png") && p.indexOf('/', dir.length()) < 0) {
+                name = p.substring(dir.length(), p.length() - ".png".length());
+            }
+        }
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        return ITEM_ALIASES.getOrDefault(name, name);
+    }
+
+    /** Largest decoded image (pixels) a preview reads; a small PNG can still declare a huge size. */
+    public static final long MAX_PIXELS = 4096L * 4096L;
+
+    /** Width times height from a PNG's IHDR chunk, or -1 if {@code data} does not start like a PNG. */
+    public static long pngPixels(byte[] data) {
+        byte[] sig = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        if (data == null || data.length < 24) {
+            return -1;
+        }
+        for (int i = 0; i < 8; i++) {
+            if (data[i] != sig[i]) {
+                return -1;
+            }
+        }
+        if (data[12] != 'I' || data[13] != 'H' || data[14] != 'D' || data[15] != 'R') {
+            return -1;
+        }
+        long w = ((data[16] & 0xFFL) << 24) | ((data[17] & 0xFF) << 16) | ((data[18] & 0xFF) << 8) | (data[19] & 0xFF);
+        long h = ((data[20] & 0xFFL) << 24) | ((data[21] & 0xFF) << 16) | ((data[22] & 0xFF) << 8) | (data[23] & 0xFF);
+        return w * h;
+    }
+
     /** Upper bound for a preview PNG read from a pack; bigger entries get no preview (zip-bomb guard). */
     public static final int MAX_IMAGE_BYTES = 8 << 20;
     /** Upper bound for an item model / item definition JSON read for the atlas check. */

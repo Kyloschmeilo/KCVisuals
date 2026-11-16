@@ -2,11 +2,15 @@ package com.kcvisuals.gui.packs;
 
 import com.kcvisuals.KCVisuals;
 import com.kcvisuals.pack.Category;
+import com.kcvisuals.pack.ModelClosure;
 import com.kcvisuals.pack.PackIndex;
 import com.kcvisuals.pack.PackSource;
+import com.kcvisuals.preview.ArgbImage;
+import com.kcvisuals.preview.Scene;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,8 +27,11 @@ import net.minecraft.resource.ResourceType;
 import net.minecraft.util.Identifier;
 
 /**
- * Preview textures for (pack, category) pairs. Reading and PNG decoding happen on one background thread; only the
- * texture upload runs on the render thread. Everything is released by {@link #evictAll()} when the menu closes.
+ * Preview textures for (pack, category, view) triples. Reading, PNG decoding and model rendering happen on one
+ * background thread; only the texture upload runs on the render thread. Item categories show the pack's inventory
+ * model (3D render or flat icon, see {@link ModelPreviews}) and fall back to the category's 2D texture; the hovered
+ * tile additionally gets a strip of {@link Scene#FRAMES} turn frames. Everything is released by {@link #evictAll()}
+ * when the menu closes.
  */
 public final class PreviewCache {
     /** Pack id used for the Vanilla tile (reads from the game's default resource pack). */
@@ -41,7 +48,14 @@ public final class PreviewCache {
     });
     private static final AtomicInteger NEXT_ID = new AtomicInteger();
 
-    public record Preview(Identifier id, int width, int height) {}
+    /** What a preview shows: the category's item (or texture), or the placed end crystal. */
+    public enum View { ITEM, PLACED }
+
+    /** {@code model} is true for a 3D render (square, {@link ModelPreviews#SIZE} px, has a hover strip). */
+    public record Preview(Identifier id, int width, int height, boolean model) {}
+
+    /** Hover animation: {@code frames} square frames of {@code size} px stacked vertically in one texture. */
+    public record Strip(Identifier id, int size, int frames) {}
 
     private enum State { LOADING, READY, NONE, MODEL_3D }
 
@@ -51,18 +65,38 @@ public final class PreviewCache {
     private static final class Entry {
         volatile State state = State.LOADING;
         volatile Preview preview;
+        /** 3D scene kept for rendering the hover strip; written by the worker before READY. */
+        volatile Scene scene;
+    }
+
+    /** Strips of the hovered tile (one per view); only one tile has strips at a time. Render thread only. */
+    private static final class Hover {
+        final String tileKey;
+        final Map<View, Strip> strips = new EnumMap<>(View.class);
+        final Map<View, Boolean> requested = new EnumMap<>(View.class);
+
+        Hover(String tileKey) {
+            this.tileKey = tileKey;
+        }
     }
 
     private final Supplier<PackIndex> index;
     private final Map<String, Entry> entries = new ConcurrentHashMap<>();
-    /** Render-thread only: textures registered by this cache. */
+    /** Render-thread only: textures registered by this cache (strips included). */
     private final List<Identifier> registered = new ArrayList<>();
-    /** Worker-thread only: recently opened packs, closed when evicted. */
+    /** Worker-thread only: recently opened packs, closed when evicted, with their output-path index. */
     private final LinkedHashMap<String, PackSource> sources = new LinkedHashMap<>(16, 0.75f, true);
+    private final Map<String, Map<String, String>> sourceIndex = new java.util.HashMap<>();
     private volatile int generation;
+    /** Written on the render thread, read by the worker to drop stale strip jobs. */
+    private volatile Hover hover;
 
     public PreviewCache(Supplier<PackIndex> index) {
         this.index = index;
+    }
+
+    private static String key(String packId, Category c, View view) {
+        return packId + '\u0000' + c.id() + '\u0000' + view;
     }
 
     /** The preview texture, or null while it is loading or if the pack has no image for the category. */
@@ -71,9 +105,14 @@ public final class PreviewCache {
         return p == null ? null : p.id();
     }
 
-    /** Like {@link #get} but with the texture size, for aspect-correct drawing. Starts loading on first request. */
+    /** The item preview with its size, for aspect-correct drawing. Starts loading on first request. */
     public Preview preview(String packId, Category c) {
-        String key = packId + '\u0000' + c.id();
+        return preview(packId, c, View.ITEM);
+    }
+
+    /** Like {@link #preview(String, Category)} for the given view. */
+    public Preview preview(String packId, Category c, View view) {
+        String key = key(packId, c, view);
         Entry e = entries.get(key);
         if (e == null) {
             Entry created = new Entry();
@@ -82,35 +121,115 @@ public final class PreviewCache {
                 e = created;
                 int gen = generation;
                 Entry target = created;
-                WORKER.execute(() -> load(gen, target, packId, c));
+                WORKER.execute(() -> load(gen, target, packId, c, view));
             }
         }
         return e.state == State.READY ? e.preview : null;
     }
 
     /**
-     * True if the pack's texture for this category is a UV atlas of a custom 3D item model; callers then show the
-     * Vanilla icon with a "3D" badge instead.
+     * True if the pack's texture for this category is a UV atlas of a custom 3D item model that could not be
+     * rendered; callers then show the Vanilla icon with a "3D" badge instead.
      */
     public boolean isModel3d(String packId, Category c) {
-        Entry e = entries.get(packId + '\u0000' + c.id());
+        Entry e = entries.get(key(packId, c, View.ITEM));
         return e != null && e.state == State.MODEL_3D;
     }
 
     /** True while the preview is still being read; false when ready or known to be missing. */
     public boolean isLoading(String packId, Category c) {
-        Entry e = entries.get(packId + '\u0000' + c.id());
+        return isLoading(packId, c, View.ITEM);
+    }
+
+    public boolean isLoading(String packId, Category c, View view) {
+        Entry e = entries.get(key(packId, c, view));
         return e == null || e.state == State.LOADING;
     }
 
-    private void load(int gen, Entry entry, String packId, Category c) {
+    /**
+     * The turn animation for a hovered tile's 3D preview, or null until it is rendered (or if the view has no 3D
+     * preview). Asking for another tile releases the previous tile's strips. Render thread.
+     */
+    public Strip hoverStrip(String packId, Category c, View view) {
+        String tileKey = packId + '\u0000' + c.id();
+        if (hover == null || !hover.tileKey.equals(tileKey)) {
+            clearHover();
+            hover = new Hover(tileKey);
+        }
+        Strip s = hover.strips.get(view);
+        if (s != null || hover.requested.containsKey(view)) {
+            return s;
+        }
+        Entry e = entries.get(key(packId, c, view));
+        Scene scene = e == null || e.state != State.READY ? null : e.scene;
+        if (scene == null) {
+            return null;
+        }
+        hover.requested.put(view, Boolean.TRUE);
+        Hover target = hover;
+        int gen = generation;
+        WORKER.execute(() -> {
+            if (gen != generation || target != hover) {
+                return;
+            }
+            NativeImage img;
+            try {
+                img = toNative(scene.strip(ModelPreviews.SIZE));
+            } catch (RuntimeException ex) {
+                KCVisuals.LOGGER.debug("Hover strip failed for {} / {}: {}", packId, c.id(), ex.toString());
+                return;
+            }
+            MinecraftClient.getInstance().execute(() -> {
+                if (gen != generation || target != hover) {
+                    img.close();
+                    return;
+                }
+                Identifier id = register(img);
+                target.strips.put(view, new Strip(id, ModelPreviews.SIZE, Scene.FRAMES));
+            });
+        });
+        return null;
+    }
+
+    /** Releases the hovered tile's strips (no tile hovered). Render thread. */
+    public void clearHover() {
+        if (hover == null) {
+            return;
+        }
+        var tm = MinecraftClient.getInstance().getTextureManager();
+        for (Strip s : hover.strips.values()) {
+            tm.destroyTexture(s.id());
+            registered.remove(s.id());
+        }
+        hover = null;
+    }
+
+    private void load(int gen, Entry entry, String packId, Category c, View view) {
         if (gen != generation) {
             return;
         }
         NativeImage img = null;
         try {
+            ModelPreviews.Result model = modelPreview(packId, c, view);
+            if (model != null) {
+                entry.scene = model.scene();
+                NativeImage rendered = toNative(model.image());
+                boolean is3d = model.scene() != null;
+                MinecraftClient.getInstance().execute(() -> upload(gen, entry, rendered, is3d));
+                return;
+            }
+            if (view == View.PLACED) {
+                entry.state = State.NONE;
+                return;
+            }
             Raw raw = readRaw(packId, c);
             if (raw != null) {
+                long pixels = PreviewPick.pngPixels(raw.bytes());
+                if (pixels > PreviewPick.MAX_PIXELS) {
+                    KCVisuals.LOGGER.warn("Preview {} in {} declares {} pixels, skipped", raw.entry(), packId, pixels);
+                    entry.state = State.NONE;
+                    return;
+                }
                 NativeImage decoded = NativeImage.read(raw.bytes());
                 boolean atlas;
                 try {
@@ -136,21 +255,65 @@ public final class PreviewCache {
             return;
         }
         NativeImage finalImg = img;
-        MinecraftClient.getInstance().execute(() -> upload(gen, entry, finalImg));
+        MinecraftClient.getInstance().execute(() -> upload(gen, entry, finalImg, false));
     }
 
-    private void upload(int gen, Entry entry, NativeImage img) {
+    /** Model-based preview, or null to use the 2D texture preview. Worker thread. */
+    private ModelPreviews.Result modelPreview(String packId, Category c, View view) throws IOException {
+        if (view == View.ITEM && PreviewPick.previewItem(c) == null) {
+            return null;
+        }
+        ModelPreviews models;
+        if (VANILLA.equals(packId)) {
+            models = new ModelPreviews(null, null);
+        } else {
+            PackSource src = source(packId);
+            if (src == null) {
+                return null;
+            }
+            models = new ModelPreviews(src, sourceIndex.computeIfAbsent(packId, id -> ModelClosure.outputIndex(src.entries())));
+        }
+        try {
+            return view == View.PLACED ? models.placedCrystal() : models.item(PreviewPick.previewItem(c), GridLayout.isDoubleWidth(c.id()));
+        } catch (RuntimeException e) {
+            KCVisuals.LOGGER.debug("Model preview failed for {} / {}: {}", packId, c.id(), e.toString());
+            return null;
+        }
+    }
+
+    private void upload(int gen, Entry entry, NativeImage img, boolean model) {
         if (gen != generation) {
             img.close();
             return;
         }
-        Identifier id = Identifier.of(KCVisuals.MOD_ID, "preview/" + NEXT_ID.incrementAndGet());
         int w = img.getWidth(), h = img.getHeight();
+        Identifier id = register(img);
+        entry.preview = new Preview(id, w, h, model);
+        entry.state = State.READY;
+    }
+
+    /** Uploads {@code img} as a new texture owned by this cache. Render thread. */
+    private Identifier register(NativeImage img) {
+        Identifier id = Identifier.of(KCVisuals.MOD_ID, "preview/" + NEXT_ID.incrementAndGet());
         NativeImageBackedTexture tex = new NativeImageBackedTexture(() -> "KC Visuals preview " + id, img);
         MinecraftClient.getInstance().getTextureManager().registerTexture(id, tex);
         registered.add(id);
-        entry.preview = new Preview(id, w, h);
-        entry.state = State.READY;
+        return id;
+    }
+
+    private static NativeImage toNative(ArgbImage src) {
+        NativeImage out = new NativeImage(src.width(), src.height(), false);
+        try {
+            for (int y = 0; y < src.height(); y++) {
+                for (int x = 0; x < src.width(); x++) {
+                    out.setColorArgb(x, y, src.get(x, y));
+                }
+            }
+            return out;
+        } catch (RuntimeException | Error e) {
+            out.close();
+            throw e;
+        }
     }
 
     /** Small text entry (item model JSON) of a pack, or null if unreadable. Worker thread. */
@@ -207,7 +370,9 @@ public final class PreviewCache {
         sources.put(packId, src);
         while (sources.size() > OPEN_SOURCES) {
             var it = sources.entrySet().iterator();
-            closeQuietly(it.next().getValue());
+            var eldest = it.next();
+            closeQuietly(eldest.getValue());
+            sourceIndex.remove(eldest.getKey());
             it.remove();
         }
         return src;
@@ -248,6 +413,7 @@ public final class PreviewCache {
     public void evictAll() {
         generation++;
         entries.clear();
+        hover = null;
         var tm = MinecraftClient.getInstance().getTextureManager();
         for (Identifier id : registered) {
             tm.destroyTexture(id);
@@ -258,6 +424,7 @@ public final class PreviewCache {
                 closeQuietly(s);
             }
             sources.clear();
+            sourceIndex.clear();
         });
     }
 

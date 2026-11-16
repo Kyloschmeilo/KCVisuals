@@ -202,4 +202,26 @@ class PreviewPickTest {
         assertArrayEquals(new int[] {128, 128}, PreviewPick.fitWithin(512, 512, 128));
         assertArrayEquals(new int[] {128, 15}, PreviewPick.fitWithin(1024, 120, 128));
     }
+
+    @Test
+    void previewItemFromPreviewPath() {
+        assertEquals("end_crystal", PreviewPick.previewItem(CRYSTAL));
+        assertEquals("diamond_sword", PreviewPick.previewItem(SWORDS));
+        assertEquals("obsidian", PreviewPick.previewItem(new Category("o", "g", "O", "textures/block/obsidian.png", List.of())));
+        assertEquals("crossbow", PreviewPick.previewItem(new Category("c", "g", "C", "textures/item/crossbow_standby.png", List.of())));
+        assertEquals("respawn_anchor", PreviewPick.previewItem(new Category("r", "g", "R", "textures/block/respawn_anchor_top.png", List.of())));
+        assertNull(PreviewPick.previewItem(new Category("h", "g", "H", "textures/gui/sprites/hud/hotbar.png", List.of())));
+        assertNull(PreviewPick.previewItem(new Category("p", "g", "P", "textures/particle/splash_0.png", List.of())));
+    }
+
+    @Test
+    void pngPixelsReadsTheHeader() {
+        byte[] png = new byte[33];
+        byte[] head = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0, 0, 0, 13, 'I', 'H', 'D', 'R',
+                0, 0, 0x40, 0, 0, 0, 0, 16};
+        System.arraycopy(head, 0, png, 0, head.length);
+        assertEquals(16384L * 16, PreviewPick.pngPixels(png));
+        assertEquals(-1, PreviewPick.pngPixels(new byte[10]));
+        assertEquals(-1, PreviewPick.pngPixels("not a png at all, really not".getBytes()));
+    }
 }
