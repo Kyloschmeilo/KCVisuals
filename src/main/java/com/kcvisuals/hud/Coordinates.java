@@ -23,7 +23,7 @@ public final class Coordinates extends HudElement {
     public void prepare(boolean preview) {
         PlayerEntity p = mc().player;
         // reduced debug info (servers hiding coordinates) must be respected outside the editor preview
-        shown = preview || !(mc().player != null && mc().player.hasReducedDebugInfo());
+        shown = preview || (p != null && !mc().player.hasReducedDebugInfo());
         if (!shown) {
             return;
         }

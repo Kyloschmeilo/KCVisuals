@@ -33,8 +33,21 @@ public final class TargetHud extends HudElement {
         super("target", "Ziel-HUD", "Zuletzt angegriffenes Ziel (8 s)");
     }
 
+    private static boolean tracking;
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+        tracking = enabled;
+        if (!enabled) {
+            TRACKER.clear();
+            reset();
+        }
+    }
+
+    /** Remembers an attacked entity; ignored while the element is disabled so no entity reference is kept. */
     public static void setTarget(Entity e) {
-        if (e instanceof LivingEntity le) {
+        if (tracking && e instanceof LivingEntity le) {
             TRACKER.set(le, Util.getMeasuringTimeMs());
         }
     }
@@ -56,6 +69,7 @@ public final class TargetHud extends HudElement {
     public void reset() {
         shown = null;
         shownFor = null;
+        shownHealth = -1;
     }
 
     private static LivingEntity current() {
